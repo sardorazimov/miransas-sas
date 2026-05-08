@@ -292,17 +292,17 @@ export default function VCoreHero() {
 
           {/* SVG CABLES (Attached flat to plane, Z=1) */}
           <svg viewBox="0 0 1200 1200" className="absolute inset-0 w-full h-full overflow-visible" style={{ transform: "translateZ(1px)" }}>
-            <ArmoredCable d="M 150 300 C 150 600, 150 600, 300 600" color={COLORS.input} reverse />
+            {/* <ArmoredCable d="M 150 300 C 150 600, 150 600, 300 600" color={COLORS.input} reverse />
             <ArmoredCable d="M 300 1050 C 600 1050, 600 1050, 600 900" color={COLORS.input} reverse />
             <ArmoredCable d="M 600 300 C 600 150, 600 150, 900 150" color={COLORS.output} />
-            <ArmoredCable d="M 1050 600 C 1050 600, 1050 900, 900 900" color={COLORS.output} />
+            <ArmoredCable d="M 1050 600 C 1050 600, 1050 900, 900 900" color={COLORS.output} /> */}
           </svg>
 
           {/* EDGE NODES */}
-          <EdgeNode x={150} y={300} color={COLORS.input} label="Local: Node 1" />
+          {/* <EdgeNode x={150} y={300} color={COLORS.input} label="Local: Node 1" />
           <EdgeNode x={300} y={1050} color={COLORS.input} label="Local: Node 2" />
           <EdgeNode x={900} y={150} color={COLORS.output} label="Edge: Region A" />
-          <EdgeNode x={1050} y={600} color={COLORS.output} label="Edge: Region B" />
+          <EdgeNode x={1050} y={600} color={COLORS.output} label="Edge: Region B" /> */}
 
           {/* HEAVY CONVEYOR BELTS (Z=20) */}
           <Belt x={425} y={600} w={350} h={100} rotate={0} isInput={true} />
