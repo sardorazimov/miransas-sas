@@ -1,294 +1,917 @@
-/* eslint-disable react-hooks/purity */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import React from "react";
+import React, { useMemo, useEffect, useRef } from "react";
+import * as THREE from 'three';
 import { motion } from "framer-motion";
 import {
-  FileCode, FileText, FileSpreadsheet, FileArchive,
-  CheckCircle2, Zap, Globe, Database, Cloud, Activity,
-  FileImage
+  FileCode, FileText, CheckCircle2,
+  Terminal, Database,
+  Sparkles,
+  Globe,
+  Cpu,
+  MessageSquare,
+  ArrowRight
 } from "lucide-react";
 
-// ============================================================================
-// CONFIGURATION & THEME (Premium SaaS Colors - Only Colors Touched)
-// ============================================================================
-const ANIM_DURATION = 14;
-const ITEMS_COUNT = 6;
-const ROSE = "#f43f5e"; // Input / Rose Contrast
-const LIME = "#9eff00"; // Output / Neon Lime
-const BG_DARK = "#020203";
-// Ultra Deep Black
-const INPUT_FILES = [
-  { Icon: FileCode, label: "app.tsx", color: "text-sky-400" },
-  { Icon: FileText, label: "config.rs", color: "text-rose-400" },
-  { Icon: FileSpreadsheet, label: "data.csv", color: "text-emerald-400" },
-  { Icon: FileArchive, label: "build.zip", color: "text-amber-400" },
-  { Icon: FileImage, label: "asset.png", color: "text-purple-400" },
-];
 
-const BLOCKS_PER_BELT = 3;
-const FILES = [
-  { Icon: FileCode, label: ".go", color: "text-sky-400" },
-  { Icon: FileText, label: ".rs", color: "text-rose-400" },
-  { Icon: FileCode, label: ".tsx", color: "text-cyan-400" },
-  { Icon: FileSpreadsheet, label: ".yml", color: "text-violet-400" },
-  { Icon: FileArchive, label: ".zip", color: "text-amber-400" },
-];
 
-const COLORS = {
-  bg: "#020203", // Ultra deep space black
-  input: "#f43f5e", // Rose-500
-  inputGlow: "rgba(244, 63, 94, 0.6)",
-  output: "#9eff00", // Neon Lime
-  outputGlow: "rgba(158, 255, 0, 0.6)",
-  metalDark: "#0b0c10",
-  metalLight: "#1a1d27",
-  grid: "rgba(255, 255, 255, 0.04)",
+const NeonButton = ({ children }: { children: React.ReactNode }) => (
+  <motion.button
+    whileHover={{ scale: 1.05 }}
+    whileTap={{ scale: 0.95 }}
+    className="group relative flex items-center gap-2 rounded-full bg-rose-500 px-6 py-3 text-sm font-bold text-white transition-shadow hover:shadow-[0_0_30px_rgba(244,63,94,0.6)]"
+  >
+    {children}
+    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+  </motion.button>
+);
+
+// ============================================================================
+// 2. KOD EDİTÖRÜ MOCKUP (MIRANSAS CORE)
+// ============================================================================
+const CodeMockup = () => {
+  const lines = [
+    { num: 1, content: "use miransas::core::{Reactor, Tunnel};", color: "text-purple-400" },
+    { num: 2, content: "use binboi::agent::Config;", color: "text-sky-400" },
+    { num: 3, content: "// Initialize high-performance node", color: "text-slate-500" },
+    { num: 4, content: "let config = Config::new(\".env\");", color: "text-amber-400" },
+    { num: 5, content: "pub async fn start_core() -> Result<()> {", color: "text-purple-400" },
+    { num: 6, content: "    let mut reactor = Reactor::init(config);", color: "text-blue-300" },
+    { num: 7, content: "    reactor.ignite().await", color: "text-rose-400" },
+    { num: 8, content: "}", color: "text-purple-400" },
+  ];
+
+  return (
+    <div className="relative h-full w-full rounded-2xl border border-white/10 bg-black/60 p-6 font-mono text-[13px] leading-relaxed backdrop-blur-xl">
+      {/* Editör Parlaması */}
+      <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full bg-rose-500/10 blur-[80px]" />
+
+      {lines.map((line) => (
+        <div key={line.num} className="flex gap-4">
+          <span className="w-4 text-slate-700">{line.num}</span>
+          <span className={line.color}>{line.content}</span>
+        </div>
+      ))}
+
+      {/* Cursor Animasyonu */}
+      <motion.div
+        animate={{ opacity: [1, 0] }}
+        transition={{ duration: 0.8, repeat: Infinity }}
+        className="ml-[54px] mt-1 h-4 w-1.5 bg-rose-500"
+      />
+    </div>
+  );
 };
 
-// ============================================================================
-// 1. CARTRIDGE (Physical Data Blocks)
-// ============================================================================
-function Cartridge({ index, delayOffset = 0 }: { index: number; delayOffset?: number }) {
-  const file = FILES[index % FILES.length];
-  const delay = `${-((ANIM_DURATION / ITEMS_COUNT) * index + delayOffset)}s`;
 
+// ============================================================================
+// CONFIGURATION & THEME
+// ============================================================================
+const ROSE = "#f43f5e";
+const LIME = "#9eff00";
+const BELT_SPEED = 1.5;
+const CORE_PULSE_DURATION = BELT_SPEED * 2;
+const FILES = [
+  { label: "INDEX.TSX", color: "text-sky-400", icon: FileCode },
+  { label: "AUTH.RS", color: "text-rose-400", icon: FileText },
+  { label: "CONFIG.ENV", color: "text-amber-400", icon: Terminal },
+  { label: "DATA.DB", color: "text-purple-400", icon: Database },
+];
+
+// ============================================================================
+// 1. LASER FLOW BACKGROUND COMPONENT (WebGL / Three.js)
+// ============================================================================
+type LaserFlowProps = {
+  className?: string;
+  style?: React.CSSProperties;
+  wispDensity?: number;
+  dpr?: number;
+  mouseSmoothTime?: number;
+  mouseTiltStrength?: number;
+  horizontalBeamOffset?: number;
+  verticalBeamOffset?: number;
+  flowSpeed?: number;
+  verticalSizing?: number;
+  horizontalSizing?: number;
+  fogIntensity?: number;
+  fogScale?: number;
+  wispSpeed?: number;
+  wispIntensity?: number;
+  flowStrength?: number;
+  decay?: number;
+  falloffStart?: number;
+  fogFallSpeed?: number;
+  color?: string;
+};
+
+const VERT = `
+precision highp float;
+attribute vec3 position;
+void main(){
+  gl_Position = vec4(position, 1.0);
+}
+`;
+
+const FRAG = `
+#ifdef GL_ES
+#extension GL_OES_standard_derivatives : enable
+#endif
+precision highp float;
+precision mediump int;
+
+uniform float iTime;
+uniform vec3 iResolution;
+uniform vec4 iMouse;
+uniform float uWispDensity;
+uniform float uTiltScale;
+uniform float uFlowTime;
+uniform float uFogTime;
+uniform float uBeamXFrac;
+uniform float uBeamYFrac;
+uniform float uFlowSpeed;
+uniform float uVLenFactor;
+uniform float uHLenFactor;
+uniform float uFogIntensity;
+uniform float uFogScale;
+uniform float uWSpeed;
+uniform float uWIntensity;
+uniform float uFlowStrength;
+uniform float uDecay;
+uniform float uFalloffStart;
+uniform float uFogFallSpeed;
+uniform vec3 uColor;
+uniform float uFade;
+
+#define PI 3.14159265359
+#define TWO_PI 6.28318530718
+#define EPS 1e-6
+#define EDGE_SOFT (DT_LOCAL*4.0)
+#define DT_LOCAL 0.0038
+#define TAP_RADIUS 6
+#define R_H 150.0
+#define R_V 150.0
+#define FLARE_HEIGHT 16.0
+#define FLARE_AMOUNT 8.0
+#define FLARE_EXP 2.0
+#define TOP_FADE_START 0.1
+#define TOP_FADE_EXP 1.0
+#define FLOW_PERIOD 0.5
+#define FLOW_SHARPNESS 1.5
+
+#define W_BASE_X 1.5
+#define W_LAYER_GAP 0.25
+#define W_LANES 10
+#define W_SIDE_DECAY 0.5
+#define W_HALF 0.01
+#define W_AA 0.15
+#define W_CELL 20.0
+#define W_SEG_MIN 0.01
+#define W_SEG_MAX 0.55
+#define W_CURVE_AMOUNT 15.0
+#define W_CURVE_RANGE (FLARE_HEIGHT - 3.0)
+#define W_BOTTOM_EXP 10.0
+
+#define FOG_ON 1
+#define FOG_CONTRAST 1.2
+#define FOG_OCTAVES 5
+#define FOG_BOTTOM_BIAS 0.8
+#define FOG_TILT_TO_MOUSE 0.05
+#define FOG_TILT_MAX_X 0.35
+#define FOG_TILT_SHAPE 1.5
+#define FOG_BEAM_MIN 0.0
+#define FOG_BEAM_MAX 0.75
+#define FOG_MASK_GAMMA 0.5
+#define FOG_EXPAND_SHAPE 12.2
+#define FOG_EDGE_MIX 0.5
+
+#define HFOG_EDGE_START 0.20
+#define HFOG_EDGE_END 0.98
+#define HFOG_EDGE_GAMMA 1.4
+#define HFOG_Y_RADIUS 25.0
+#define HFOG_Y_SOFT 60.0
+
+#define EDGE_X0 0.22
+#define EDGE_X1 0.995
+#define EDGE_X_GAMMA 1.25
+#define EDGE_LUMA_T0 0.0
+#define EDGE_LUMA_T1 2.0
+#define DITHER_STRENGTH 1.0
+
+    float g(float x){return x<=0.00031308?12.92*x:1.055*pow(x,1.0/2.4)-0.055;}
+    float bs(vec2 p,vec2 q,float powr){
+        float d=distance(p,q),f=powr*uFalloffStart,r=(f*f)/(d*d+EPS);
+        return powr*min(1.0,r);
+    }
+    float bsa(vec2 p,vec2 q,float powr,vec2 s){
+        vec2 d=p-q; float dd=(d.x*d.x)/(s.x*s.x)+(d.y*d.y)/(s.y*s.y),f=powr*uFalloffStart,r=(f*f)/(dd+EPS);
+        return powr*min(1.0,r);
+    }
+    float tri01(float x){float f=fract(x);return 1.0-abs(f*2.0-1.0);}
+    float tauWf(float t,float tmin,float tmax){float a=smoothstep(tmin,tmin+EDGE_SOFT,t),b=1.0-smoothstep(tmax-EDGE_SOFT,tmax,t);return max(0.0,a*b);} 
+    float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+34.123);return fract(p.x*p.y);}
+    float vnoise(vec2 p){
+        vec2 i=floor(p),f=fract(p);
+        float a=h21(i),b=h21(i+vec2(1,0)),c=h21(i+vec2(0,1)),d=h21(i+vec2(1,1));
+        vec2 u=f*f*(3.0-2.0*f);
+        return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);
+    }
+    float fbm2(vec2 p){
+        float v=0.0,amp=0.6; mat2 m=mat2(0.86,0.5,-0.5,0.86);
+        for(int i=0;i<FOG_OCTAVES;++i){v+=amp*vnoise(p); p=m*p*2.03+17.1; amp*=0.52;}
+        return v;
+    }
+    float rGate(float x,float l){float a=smoothstep(0.0,W_AA,x),b=1.0-smoothstep(l,l+W_AA,x);return max(0.0,a*b);}
+    float flareY(float y){float t=clamp(1.0-(clamp(y,0.0,FLARE_HEIGHT)/max(FLARE_HEIGHT,EPS)),0.0,1.0);return pow(t,FLARE_EXP);}
+
+    float vWisps(vec2 uv,float topF){
+    float y=uv.y,yf=(y+uFlowTime*uWSpeed)/W_CELL;
+    float dRaw=clamp(uWispDensity,0.0,2.0),d=dRaw<=0.0?1.0:dRaw;
+    float lanesF=floor(float(W_LANES)*min(d,1.0)+0.5); 
+    int lanes=int(max(1.0,lanesF));
+    float sp=min(d,1.0),ep=max(d-1.0,0.0);
+    float fm=flareY(max(y,0.0)),rm=clamp(1.0-(y/max(W_CURVE_RANGE,EPS)),0.0,1.0),cm=fm*rm;
+    const float G=0.05; float xS=1.0+(FLARE_AMOUNT*W_CURVE_AMOUNT*G)*cm;
+    float sPix=clamp(y/R_V,0.0,1.0),bGain=pow(1.0-sPix,W_BOTTOM_EXP),sum=0.0;
+    for(int s=0;s<2;++s){
+        float sgn=s==0?-1.0:1.0;
+        for(int i=0;i<W_LANES;++i){
+            if(i>=lanes) break;
+            float off=W_BASE_X+float(i)*W_LAYER_GAP,xc=sgn*(off*xS);
+            float dx=abs(uv.x-xc),lat=1.0-smoothstep(W_HALF,W_HALF+W_AA,dx),amp=exp(-off*W_SIDE_DECAY);
+            float seed=h21(vec2(off,sgn*17.0)),yf2=yf+seed*7.0,ci=floor(yf2),fy=fract(yf2);
+            float seg=mix(W_SEG_MIN,W_SEG_MAX,h21(vec2(ci,off*2.3)));
+            float spR=h21(vec2(ci,off+sgn*31.0)),seg1=rGate(fy,seg)*step(spR,sp);
+            if(ep>0.0){float spR2=h21(vec2(ci*3.1+7.0,off*5.3+sgn*13.0)); float f2=fract(fy+0.5); seg1+=rGate(f2,seg*0.9)*step(spR2,ep);}
+            sum+=amp*lat*seg1;
+        }
+    }
+    float span=smoothstep(-3.0,0.0,y)*(1.0-smoothstep(R_V-6.0,R_V,y));
+    return uWIntensity*sum*topF*bGain*span;
+}
+
+void mainImage(out vec4 fc,in vec2 frag){
+    vec2 C=iResolution.xy*.5; float invW=1.0/max(C.x,1.0);
+    vec2 sc=(512.0/iResolution.xy)*.4;
+    vec2 uv=(frag-C)*sc,off=vec2(uBeamXFrac*iResolution.x*sc.x,uBeamYFrac*iResolution.y*sc.y);
+    vec2 uvc = uv - off;
+    float a=0.0,b=0.0;
+    float basePhase=1.5*PI+uDecay*.5; float tauMin=basePhase-uDecay; float tauMax=basePhase;
+    float cx=clamp(uvc.x/(R_H*uHLenFactor),-1.0,1.0),tH=clamp(TWO_PI-acos(cx),tauMin,tauMax);
+    for(int k=-TAP_RADIUS;k<=TAP_RADIUS;++k){
+        float tu=tH+float(k)*DT_LOCAL,wt=tauWf(tu,tauMin,tauMax); if(wt<=0.0) continue;
+        float spd=max(abs(sin(tu)),0.02),u=clamp((basePhase-tu)/max(uDecay,EPS),0.0,1.0),env=pow(1.0-abs(u*2.0-1.0),0.8);
+        vec2 p=vec2((R_H*uHLenFactor)*cos(tu),0.0);
+        a+=wt*bs(uvc,p,env*spd);
+    }
+    float yPix=uvc.y,cy=clamp(-yPix/(R_V*uVLenFactor),-1.0,1.0),tV=clamp(TWO_PI-acos(cy),tauMin,tauMax);
+    for(int k=-TAP_RADIUS;k<=TAP_RADIUS;++k){
+        float tu=tV+float(k)*DT_LOCAL,wt=tauWf(tu,tauMin,tauMax); if(wt<=0.0) continue;
+        float yb=(-R_V)*cos(tu),s=clamp(yb/R_V,0.0,1.0),spd=max(abs(sin(tu)),0.02);
+        float env=pow(1.0-s,0.6)*spd;
+        float cap=1.0-smoothstep(TOP_FADE_START,1.0,s); cap=pow(cap,TOP_FADE_EXP); env*=cap;
+        float ph=s/max(FLOW_PERIOD,EPS)+uFlowTime*uFlowSpeed;
+        float fl=pow(tri01(ph),FLOW_SHARPNESS);
+        env*=mix(1.0-uFlowStrength,1.0,fl);
+        float yp=(-R_V*uVLenFactor)*cos(tu),m=pow(smoothstep(FLARE_HEIGHT,0.0,yp),FLARE_EXP),wx=1.0+FLARE_AMOUNT*m;
+        vec2 sig=vec2(wx,1.0),p=vec2(0.0,yp);
+        float mask=step(0.0,yp);
+        b+=wt*bsa(uvc,p,mask*env,sig);
+    }
+    float sPix=clamp(yPix/R_V,0.0,1.0),topA=pow(1.0-smoothstep(TOP_FADE_START,1.0,sPix),TOP_FADE_EXP);
+    float L=a+b*topA;
+    float w=vWisps(vec2(uvc.x,yPix),topA);
+    float fog=0.0;
+#if FOG_ON
+    vec2 fuv=uvc*uFogScale;
+    float mAct=step(1.0,length(iMouse.xy)),nx=((iMouse.x-C.x)*invW)*mAct;
+    float ax = abs(nx);
+    float stMag = mix(ax, pow(ax, FOG_TILT_SHAPE), 0.35);
+    float st = sign(nx) * stMag * uTiltScale;
+    st = clamp(st, -FOG_TILT_MAX_X, FOG_TILT_MAX_X);
+    vec2 dir=normalize(vec2(st,1.0));
+    fuv+=uFogTime*uFogFallSpeed*dir;
+    vec2 prp=vec2(-dir.y,dir.x);
+    fuv+=prp*(0.08*sin(dot(uvc,prp)*0.08+uFogTime*0.9));
+    float n=fbm2(fuv+vec2(fbm2(fuv+vec2(7.3,2.1)),fbm2(fuv+vec2(-3.7,5.9)))*0.6);
+    n=pow(clamp(n,0.0,1.0),FOG_CONTRAST);
+    float pixW = 1.0 / max(iResolution.y, 1.0);
+#ifdef GL_OES_standard_derivatives
+    float wL = max(fwidth(L), pixW);
+#else
+    float wL = pixW;
+#endif
+    float m0=pow(smoothstep(FOG_BEAM_MIN - wL, FOG_BEAM_MAX + wL, L),FOG_MASK_GAMMA);
+    float bm=1.0-pow(1.0-m0,FOG_EXPAND_SHAPE); bm=mix(bm*m0,bm,FOG_EDGE_MIX);
+    float yP=1.0-smoothstep(HFOG_Y_RADIUS,HFOG_Y_RADIUS+HFOG_Y_SOFT,abs(yPix));
+    float nxF=abs((frag.x-C.x)*invW),hE=1.0-smoothstep(HFOG_EDGE_START,HFOG_EDGE_END,nxF); hE=pow(clamp(hE,0.0,1.0),HFOG_EDGE_GAMMA);
+    float hW=mix(1.0,hE,clamp(yP,0.0,1.0));
+    float bBias=mix(1.0,1.0-sPix,FOG_BOTTOM_BIAS);
+    float browserFogIntensity = uFogIntensity;
+    browserFogIntensity *= 1.8;
+    float radialFade = 1.0 - smoothstep(0.0, 0.7, length(uvc) / 120.0);
+    float safariFog = n * browserFogIntensity * bBias * bm * hW * radialFade;
+    fog = safariFog;
+#endif
+    float LF=L+fog;
+    float dith=(h21(frag)-0.5)*(DITHER_STRENGTH/255.0);
+    float tone=g(LF+w);
+    vec3 col=tone*uColor+dith;
+    float alpha=clamp(g(L+w*0.6)+dith*0.6,0.0,1.0);
+    float nxE=abs((frag.x-C.x)*invW),xF=pow(clamp(1.0-smoothstep(EDGE_X0,EDGE_X1,nxE),0.0,1.0),EDGE_X_GAMMA);
+    float scene=LF+max(0.0,w)*0.5,hi=smoothstep(EDGE_LUMA_T0,EDGE_LUMA_T1,scene);
+    float eM=mix(xF,1.0,hi);
+    col*=eM; alpha*=eM;
+    col*=uFade; alpha*=uFade;
+    fc=vec4(col,alpha);
+}
+
+void main(){
+  vec4 fc;
+  mainImage(fc, gl_FragCoord.xy);
+  gl_FragColor = fc;
+}
+`;
+
+function hexToRGB(hex: string) {
+  let c = hex.trim();
+  if (c[0] === '#') c = c.slice(1);
+  if (c.length === 3)
+    c = c.split('').map(x => x + x).join('');
+  const n = parseInt(c, 16) || 0xffffff;
+  return { r: ((n >> 16) & 255) / 255, g: ((n >> 8) & 255) / 255, b: (n & 255) / 255 };
+}
+
+const LaserFlow: React.FC<LaserFlowProps> = ({
+  className,
+  style,
+  wispDensity = 1,
+  dpr,
+  mouseSmoothTime = 0.0,
+  mouseTiltStrength = 0.01,
+  horizontalBeamOffset = 0.1,
+  verticalBeamOffset = 0.0,
+  flowSpeed = 0.35,
+  verticalSizing = 2.0,
+  horizontalSizing = 0.5,
+  fogIntensity = 0.45,
+  fogScale = 0.3,
+  wispSpeed = 15.0,
+  wispIntensity = 5.0,
+  flowStrength = 0.25,
+  decay = 1.1,
+  falloffStart = 1.2,
+  fogFallSpeed = 0.6,
+  color = '#FF79C6'
+}) => {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const uniformsRef = useRef<any>(null);
+  const hasFadedRef = useRef(false);
+  const rectRef = useRef<DOMRect | null>(null);
+  const baseDprRef = useRef<number>(1);
+  const currentDprRef = useRef<number>(1);
+  const lastSizeRef = useRef({ width: 0, height: 0, dpr: 0 });
+  const fpsSamplesRef = useRef<number[]>([]);
+  const lastFpsCheckRef = useRef<number>(typeof performance !== 'undefined' ? performance.now() : 0);
+  const emaDtRef = useRef<number>(16.7);
+  const pausedRef = useRef<boolean>(false);
+  const inViewRef = useRef<boolean>(true);
+
+  const mouseSmoothTimeRef = useRef(mouseSmoothTime);
+  useEffect(() => { mouseSmoothTimeRef.current = mouseSmoothTime; }, [mouseSmoothTime]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mount = mountRef.current!;
+    const renderer = new THREE.WebGLRenderer({
+      antialias: false, alpha: false, depth: false, stencil: false,
+      powerPreference: 'high-performance', premultipliedAlpha: false,
+      preserveDrawingBuffer: false, failIfMajorPerformanceCaveat: false, logarithmicDepthBuffer: false
+    });
+    rendererRef.current = renderer;
+
+    baseDprRef.current = Math.min(dpr ?? (window.devicePixelRatio || 1), 2);
+    currentDprRef.current = baseDprRef.current;
+
+    renderer.setPixelRatio(currentDprRef.current);
+    renderer.shadowMap.enabled = false;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.setClearColor(0x000000, 1);
+    const canvas = renderer.domElement;
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.display = 'block';
+    mount.appendChild(canvas);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
+
+    const uniforms = {
+      iTime: { value: 0 },
+      iResolution: { value: new THREE.Vector3(1, 1, 1) },
+      iMouse: { value: new THREE.Vector4(0, 0, 0, 0) },
+      uWispDensity: { value: wispDensity },
+      uTiltScale: { value: mouseTiltStrength },
+      uFlowTime: { value: 0 },
+      uFogTime: { value: 0 },
+      uBeamXFrac: { value: horizontalBeamOffset },
+      uBeamYFrac: { value: verticalBeamOffset },
+      uFlowSpeed: { value: flowSpeed },
+      uVLenFactor: { value: verticalSizing },
+      uHLenFactor: { value: horizontalSizing },
+      uFogIntensity: { value: fogIntensity },
+      uFogScale: { value: fogScale },
+      uWSpeed: { value: wispSpeed },
+      uWIntensity: { value: wispIntensity },
+      uFlowStrength: { value: flowStrength },
+      uDecay: { value: decay },
+      uFalloffStart: { value: falloffStart },
+      uFogFallSpeed: { value: fogFallSpeed },
+      uColor: { value: new THREE.Vector3(1, 1, 1) },
+      uFade: { value: hasFadedRef.current ? 1 : 0 }
+    };
+    uniformsRef.current = uniforms;
+
+    const material = new THREE.RawShaderMaterial({
+      vertexShader: VERT, fragmentShader: FRAG, uniforms,
+      transparent: false, depthTest: false, depthWrite: false, blending: THREE.NormalBlending
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+
+    const clock = new THREE.Clock();
+    let prevTime = 0;
+    let fade = hasFadedRef.current ? 1 : 0;
+
+    const mouseTarget = new THREE.Vector2(0, 0);
+    const mouseSmooth = new THREE.Vector2(0, 0);
+
+    const setSizeNow = () => {
+      const w = mount.clientWidth || 1;
+      const h = mount.clientHeight || 1;
+      const pr = currentDprRef.current;
+      const last = lastSizeRef.current;
+      if (Math.abs(w - last.width) < 0.5 && Math.abs(h - last.height) < 0.5 && Math.abs(pr - last.dpr) < 0.01) return;
+
+      lastSizeRef.current = { width: w, height: h, dpr: pr };
+      renderer.setPixelRatio(pr);
+      renderer.setSize(w, h, false);
+      uniforms.iResolution.value.set(w * pr, h * pr, pr);
+      rectRef.current = canvas.getBoundingClientRect();
+      if (!pausedRef.current) renderer.render(scene, camera);
+    };
+
+    let resizeRaf = 0;
+    const scheduleResize = () => {
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(setSizeNow);
+    };
+
+    setSizeNow();
+    const ro = new ResizeObserver(scheduleResize);
+    ro.observe(mount);
+
+    const io = new IntersectionObserver(entries => { inViewRef.current = entries[0]?.isIntersecting ?? true; }, { root: null, threshold: 0 });
+    io.observe(mount);
+
+    const onVis = () => { pausedRef.current = document.hidden; };
+    document.addEventListener('visibilitychange', onVis, { passive: true });
+
+    const updateMouse = (clientX: number, clientY: number) => {
+      const rect = rectRef.current;
+      if (!rect) return;
+      const ratio = currentDprRef.current;
+      mouseTarget.set((clientX - rect.left) * ratio, (rect.height * ratio) - ((clientY - rect.top) * ratio));
+    };
+    const onMove = (ev: PointerEvent | MouseEvent) => updateMouse(ev.clientX, ev.clientY);
+    const onLeave = () => mouseTarget.set(0, 0);
+
+    canvas.addEventListener('pointermove', onMove as any, { passive: true });
+    canvas.addEventListener('pointerdown', onMove as any, { passive: true });
+    canvas.addEventListener('pointerenter', onMove as any, { passive: true });
+    canvas.addEventListener('pointerleave', onLeave as any, { passive: true });
+
+    const onCtxLost = (e: Event) => { e.preventDefault(); pausedRef.current = true; };
+    const onCtxRestored = () => { pausedRef.current = false; scheduleResize(); };
+    canvas.addEventListener('webglcontextlost', onCtxLost, false);
+    canvas.addEventListener('webglcontextrestored', onCtxRestored, false);
+
+    let raf = 0;
+    let lastDprChange = 0;
+
+    const adjustDprIfNeeded = (now: number) => {
+      if (now - lastFpsCheckRef.current < 750) return;
+      const samples = fpsSamplesRef.current;
+      if (samples.length === 0) { lastFpsCheckRef.current = now; return; }
+
+      const avgFps = samples.reduce((a, b) => a + b, 0) / samples.length;
+      let next = currentDprRef.current;
+      const base = baseDprRef.current;
+
+      if (avgFps < 50) next = Math.max(0.6, Math.min(base, currentDprRef.current * 0.85));
+      else if (avgFps > 58 && currentDprRef.current < base) next = Math.max(0.6, Math.min(base, currentDprRef.current * 1.1));
+
+      if (Math.abs(next - currentDprRef.current) > 0.01 && now - lastDprChange > 2000) {
+        currentDprRef.current = next;
+        lastDprChange = now;
+        setSizeNow();
+      }
+
+      fpsSamplesRef.current = [];
+      lastFpsCheckRef.current = now;
+    };
+
+    const animate = () => {
+      raf = requestAnimationFrame(animate);
+      if (pausedRef.current || !inViewRef.current) return;
+
+      const t = clock.getElapsedTime();
+      const dt = Math.max(0, t - prevTime);
+      prevTime = t;
+
+      emaDtRef.current = emaDtRef.current * 0.9 + (dt * 1000) * 0.1;
+      fpsSamplesRef.current.push(1000 / Math.max(1, emaDtRef.current));
+
+      uniforms.iTime.value = t;
+      const cdt = Math.min(0.033, Math.max(0.001, dt));
+      (uniforms.uFlowTime.value as number) += cdt;
+      (uniforms.uFogTime.value as number) += cdt;
+
+      if (!hasFadedRef.current) {
+        fade = Math.min(1, fade + cdt / 1.0);
+        uniforms.uFade.value = fade;
+        if (fade >= 1) hasFadedRef.current = true;
+      }
+
+      const tau = Math.max(1e-3, mouseSmoothTimeRef.current);
+      mouseSmooth.lerp(mouseTarget, 1 - Math.exp(-cdt / tau));
+      uniforms.iMouse.value.set(mouseSmooth.x, mouseSmooth.y, 0, 0);
+
+      renderer.render(scene, camera);
+      adjustDprIfNeeded(performance.now());
+    };
+
+    animate();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      ro.disconnect(); io.disconnect();
+      document.removeEventListener('visibilitychange', onVis);
+      canvas.removeEventListener('pointermove', onMove as any);
+      canvas.removeEventListener('pointerdown', onMove as any);
+      canvas.removeEventListener('pointerenter', onMove as any);
+      canvas.removeEventListener('pointerleave', onLeave as any);
+      canvas.removeEventListener('webglcontextlost', onCtxLost);
+      canvas.removeEventListener('webglcontextrestored', onCtxRestored);
+      scene.clear(); geometry.dispose(); material.dispose(); renderer.dispose();
+      renderer.forceContextLoss();
+      if (mount.contains(canvas)) mount.removeChild(canvas);
+    };
+  }, [dpr]);
+
+  useEffect(() => {
+    const uniforms = uniformsRef.current;
+    if (!uniforms) return;
+    uniforms.uWispDensity.value = wispDensity;
+    uniforms.uTiltScale.value = mouseTiltStrength;
+    uniforms.uBeamXFrac.value = horizontalBeamOffset;
+    uniforms.uBeamYFrac.value = verticalBeamOffset;
+    uniforms.uFlowSpeed.value = flowSpeed;
+    uniforms.uVLenFactor.value = verticalSizing;
+    uniforms.uHLenFactor.value = horizontalSizing;
+    uniforms.uFogIntensity.value = fogIntensity;
+    uniforms.uFogScale.value = fogScale;
+    uniforms.uWSpeed.value = wispSpeed;
+    uniforms.uWIntensity.value = wispIntensity;
+    uniforms.uFlowStrength.value = flowStrength;
+    uniforms.uDecay.value = decay;
+    uniforms.uFalloffStart.value = falloffStart;
+    uniforms.uFogFallSpeed.value = fogFallSpeed;
+
+    const { r, g, b } = hexToRGB(color || '#FFFFFF');
+    uniforms.uColor.value.set(r, g, b);
+  }, [wispDensity, mouseTiltStrength, horizontalBeamOffset, verticalBeamOffset, flowSpeed, verticalSizing, horizontalSizing, fogIntensity, fogScale, wispSpeed, wispIntensity, flowStrength, decay, falloffStart, fogFallSpeed, color]);
+
+  return <div ref={mountRef} className={`w-full h-full relative ${className || ''}`} style={style} />;
+};
+
+
+// ============================================================================
+// 2. ISOMETRIC COMPONENTS (Conveyors & Laser Flow inside belts)
+// ============================================================================
+function BeltLaserFlow({ isInput, color }: { isInput: boolean; color: string }) {
   return (
-    <div
-      className="absolute top-1/2 -translate-y-1/2 w-[64px] h-[64px] z-20"
-      style={{
-        animation: `vcore-item-flow ${ANIM_DURATION}s linear infinite`,
-        animationDelay: delay,
-        transformStyle: "preserve-3d",
-      }}
-    >
-      <div className="absolute inset-0 bg-black/90 blur-md transform translateZ(-2px) scale-110" />
-      <div
-        className="absolute inset-0 bg-gradient-to-br from-[#1c1f2e] to-[#0a0c12] rounded-xl border border-white/10 flex items-center justify-center overflow-hidden"
-        style={{ transform: "translateZ(8px)", boxShadow: "0 10px 25px rgba(0,0,0,0.8)" }}
-      >
-        <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
-
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1" style={{ animation: `vcore-raw-fade ${ANIM_DURATION}s linear infinite`, animationDelay: delay }}>
-          <file.Icon className={`w-5 h-5 ${file.color}`} strokeWidth={1.5} />
-          <span className={`font-mono text-[8px] font-bold ${file.color}`}>{file.label}</span>
-        </div>
-
-        <div className="absolute inset-0 flex items-center justify-center" style={{ animation: `vcore-out-fade ${ANIM_DURATION}s linear infinite`, animationDelay: delay }}>
-          <CheckCircle2 className="w-7 h-7 text-[#9eff00] drop-shadow-[0_0_10px_#9eff00]" strokeWidth={2.5} />
-        </div>
-      </div>
+    <div className="absolute inset-0 pointer-events-none z-40 overflow-hidden rounded-2xl">
+      <motion.div
+        animate={{ x: isInput ? ["-100%", "300%"] : ["300%", "-100%"], opacity: [0, 1, 1, 0] }}
+        transition={{ duration: 1.2, repeat: Infinity, ease: "linear", repeatDelay: 0.3 }}
+        className="absolute top-1/2 w-48 h-[3px] -translate-y-1/2"
+        style={{ background: `linear-gradient(90deg, transparent, ${color}, #ffffff, ${color}, transparent)`, boxShadow: `0 0 25px ${color}, 0 0 50px ${color}` }}
+      />
+      <motion.div
+        animate={{ x: isInput ? ["-50%", "350%"] : ["350%", "-50%"], opacity: [0, 1, 1, 0] }}
+        transition={{ duration: 0.8, repeat: Infinity, ease: "linear", delay: 0.7 }}
+        className="absolute top-[45%] w-24 h-[1px] -translate-y-1/2 blur-[1px]"
+        style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)`, boxShadow: `0 0 15px ${color}` }}
+      />
     </div>
   );
 }
 
-// ============================================================================
-// 2. CUBE FACE (Premium Metallic Surfaces)
-// ============================================================================
-function CubeFace({ transform, type }: { transform: string; type: "input" | "output" | "top" | "bottom" }) {
-  const isSide = type === "input" || type === "output";
-  const glowColor = type === "input" ? ROSE : LIME;
-
-  return (
-    <div
-      className="absolute top-1/2 left-1/2 w-[240px] h-[240px] -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
-      style={{
-        transform,
-        transformStyle: "preserve-3d",
-        maskImage: isSide ? "radial-gradient(circle at center, transparent 48px, black 49px)" : "none",
-        WebkitMaskImage: isSide ? "radial-gradient(circle at center, transparent 48px, black 49px)" : "none",
-      }}
-    >
-      <div className={`absolute inset-0 border-2 border-[#9eff00]  ${type === 'bottom' ? 'bg-[#020203]' : 'bg-gradient-to-br from-white/10 '}`} style={{ boxShadow: "inset 0 0 60px #000000" }} />
-      {isSide && (
-        <div className="absolute w-[98px] h-[98px] rounded-full border-4 shadow-[0_0_20px_currentColor]" style={{ color: glowColor, opacity: 0.25 }} />
-      )}
-    </div>
-  );
-}
-
-// ============================================================================
-// 3. CONVEYOR BELT (Through The Core)
-// ============================================================================
-const ConveyorBelt = ({ x, y, w, h, rotate, isInput }: { x: number; y: number; w: number; h: number; rotate: number; isInput: boolean }) => (
-  <div
-    className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center z-20 group "
-    style={{ left: x, top: y, width: w, height: h, transform: `rotate(${rotate}deg)`, transformStyle: "preserve-3d" }}
-  >
-    {/* Floor Ambient occlusion shadow */}
-    <div className="absolute inset-[-10px] bg-black/80 blur-xl transform translateZ(-5px)" />
-
-    {/* Left Rail */}
-    <div className="absolute top-0 bottom-0 left-0 w-2 bg-gradient-to-r from-[#1a1c23] to-[#0a0c10] border-r border-[#9eff00] rounded-l-sm shadow-[inset_1px_0_2px_rgba(255,255,255,0.1)]" style={{ transform: "translateZ(4px)" }} />
-    {/* Right Rail */}
-    <div className="absolute top-0 bottom-0 right-0 w-2 bg-gradient-to-l from-[#9eff00] to-[#0a0c10] border-l border-[#9eff00] rounded-r-sm shadow-[inset_-1px_0_2px_rgba(255,255,255,0.1)]" style={{ transform: "translateZ(4px)" }} />
-
-    {/* Glowing Status Strip on Rails */}
-    <div className="absolute top-0 bottom-0 left-[2px] w-[1px] opacity-50" style={{ background: `linear-gradient(to bottom, transparent, ${isInput ? COLORS.input : COLORS.output}, transparent)` }} />
-    <div className="absolute top-0 bottom-0 right-[2px] w-[1px] opacity-50" style={{ background: `linear-gradient(to bottom, transparent, ${isInput ? COLORS.input : COLORS.output}, transparent)` }} />
-
-    {/* Roller End Caps */}
-    <div className="absolute left-1 right-1 h-6 top-[-12px] bg-gradient-to-b from-[#2a2d36] to-[#0a0c10] rounded-full border border-[#9eff00] flex items-center justify-between px-2" style={{ transform: "translateZ(2px)" }}>
-      <div className="w-1.5 h-1.5 rounded-full bg-black shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]" />
-      <div className="w-1.5 h-1.5 rounded-full bg-black shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]" />
-    </div>
-    <div className="absolute left-1 right-1 h-6 bottom-[-12px] bg-gradient-to-t from-[#2a2d36] to-[#0a0c10] rounded-full border border-[#9eff00] flex items-center justify-between px-2" style={{ transform: "translateZ(2px)" }}>
-      <div className="w-1.5 h-1.5 rounded-full bg-black shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]" />
-      <div className="w-1.5 h-1.5 rounded-full bg-black shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]" />
-    </div>
-
-    {/* The Belt Track */}
-    <div className="absolute inset-y-0 left-2 right-2 bg-[#020203] overflow-hidden">
-      <div className="absolute inset-0 shadow-[inset_5px_0_10px_rgba(0,0,0,0.8),inset_-5px_0_10px_rgba(0,0,0,0.8)] z-10 pointer-events-none" />
-
-      {/* Moving Ridges */}
-      <div
-        className="absolute inset-0 opacity-80"
-        style={{
-          backgroundImage: "repeating-linear-gradient(90deg, #050608 0px, #050608 20px, #0a0c10 20px, #0a0c10 24px, rgba(255,255,255,0.02) 24px, rgba(255,255,255,0.02) 25px)",
-          backgroundSize: "25px 100%",
-          animation: `mrs-belt-scroll 1s linear infinite ${isInput ? "reverse" : "normal"}`,
-        }}
-      />
-
-      {/* Energy Grid Lines moving with belt */}
-      <div
-        className="absolute inset-0 opacity-20 mix-blend-screen"
-        style={{
-          backgroundImage: `linear-gradient(90deg, transparent 0%, ${isInput ? COLORS.input : COLORS.output} 50%, transparent 100%)`,
-          backgroundSize: "200% 100%",
-          animation: `mrs-energy-flow 3s ease-in-out infinite ${isInput ? "reverse" : "normal"}`,
-        }}
-      />
-    </div>
-
-    {/* Moving Files */}
-    {Array.from({ length: BLOCKS_PER_BELT }).map((_, i) => (
-      <FileBlock key={i} delay={(ANIM_DURATION / BLOCKS_PER_BELT) * i} isInput={isInput} />
-    ))}
-  </div>
-);
-const FileBlock = ({ delay, isInput }: { delay: number; isInput: boolean }) => {
-  const file = INPUT_FILES[Math.floor(Math.random() * INPUT_FILES.length)];
-
+function DataCard({ delay, color, label, Icon, isOutput = false }: { delay: number; color: string; label: string; Icon: any; isOutput?: boolean }) {
   return (
     <motion.div
-      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+      initial={{ opacity: 0, x: -300, scale: 0.6 }}
+      animate={{ opacity: [0, 1, 1, 0], x: [-300, 300], scale: [0.6, 1, 1, 0.6] }}
+      transition={{ duration: 8, repeat: Infinity, ease: "linear", delay: -delay, times: [0, 0.15, 0.85, 1] }}
+      className="absolute top-1/2 left-1/2 -ml-10 -mt-12 w-20 h-24 z-30"
       style={{ transformStyle: "preserve-3d" }}
-      animate={{
-        x: isInput ? [-300, 150] : [-150, 300],
-        opacity: [0, 1, 1, 0],
-        scale: [0.5, 1, 1, 0.5]
-      }}
-      transition={{ duration: ANIM_DURATION, repeat: Infinity, ease: "linear", delay: -delay, times: [0, 0.1, 0.9, 1] }}
     >
-      <div className="relative w-20 h-24" style={{ transformStyle: "preserve-3d" }}>
-        {/* Contact Shadow */}
-        <div className="absolute inset-0 bg-black/90 blur-md transform translateZ(2px) scale-110" />
-
-        {/* High-Tech Cartridge Body */}
-        <div
-          className="absolute inset-0 bg-gradient-to-br from-[#1e2233] via-[#0f111a] to-[#050608] rounded-xl flex flex-col items-center justify-between p-2 overflow-hidden border border-white/10"
-          style={{
-            transform: "translateZ(15px)",
-            boxShadow: "inset 1px 1px 2px rgba(255,255,255,0.1), inset -1px -1px 4px rgba(0,0,0,0.8), 0 15px 25px rgba(0,0,0,0.6)"
-          }}
-        >
-          {/* Top glowing notch */}
-          <div className="w-10 h-1 rounded-full bg-black shadow-[inset_0_1px_2px_rgba(0,0,0,1)] relative overflow-hidden">
-            <div className="absolute inset-0 opacity-50" style={{ background: isInput ? COLORS.input : COLORS.output, filter: 'blur(2px)' }} />
+      <div className="absolute inset-0 bg-black/80 blur-xl transform translateZ(-5px) scale-110" />
+      <div
+        className="absolute inset-0 bg-gradient-to-br from-[#1e2233] to-[#050608] border border-white/10 rounded-xl flex flex-col items-center justify-center p-3 gap-2"
+        style={{ transform: "translateZ(20px)", boxShadow: "0 10px 25px rgba(0,0,0,0.6)" }}
+      >
+        {isOutput ? (
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-10 h-10 rounded-full bg-[#9eff00]/20 border border-[#9eff00]/40 flex items-center justify-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-[#9eff00]/20 animate-ping opacity-50" />
+              <CheckCircle2 className="w-6 h-6 text-[#9eff00] relative z-10" strokeWidth={3} />
+            </div>
+            <span className="text-[7px] font-mono font-black text-[#9eff00] tracking-widest uppercase text-glow-lime">DONE</span>
           </div>
-
-          {/* Glass Top Reflection */}
-          <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
-
-          {isInput ? (
-            <div className="flex flex-col items-center justify-center gap-2 z-10 w-full h-full">
-              <div className="w-10 h-10 rounded-full bg-black/50 border border-white/5 flex items-center justify-center shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]">
-                <file.Icon className={`w-5 h-5 ${file.color} drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]`} strokeWidth={1.5} />
-              </div>
-              <div className="bg-black/60 px-2 py-0.5 rounded border border-white/5 w-full text-center">
-                <span className={`font-mono text-[9px] font-bold ${file.color} truncate block w-full`}>{file.label}</span>
-              </div>
+        ) : (
+          <>
+            <div className="w-10 h-10 rounded-full bg-black/40 border border-white/10 flex items-center justify-center relative overflow-hidden">
+              <div className="absolute w-[200%] h-[2px] bg-white/20 -rotate-45 animate-[spin_3s_linear_infinite]" />
+              <Icon className={`w-6 h-6 ${color} relative z-10`} strokeWidth={2} />
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center gap-2 z-10 w-full h-full">
-              <div className="absolute inset-0 bg-[#9eff00]/20 blur-xl mix-blend-screen" />
-              <div className="w-10 h-10 rounded-full bg-[#9eff00]/10 border border-[#9eff00]/30 flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6 text-[#9eff00] drop-shadow-[0_0_12px_#9eff00]" strokeWidth={2.5} />
-              </div>
-              <div className="bg-[#9eff00]/10 px-2 py-0.5 rounded border border-[#9eff00]/20 w-full text-center">
-                <span className="font-mono text-[9px] font-bold text-[#9eff00] truncate block w-full">COMPILED</span>
-              </div>
-            </div>
-          )}
-        </div>
+            <span className={`text-[8px] font-mono font-black ${color} tracking-tighter uppercase`}>{label}</span>
+          </>
+        )}
       </div>
     </motion.div>
   );
 }
-// ============================================================================
-// 4. MAIN SCENE
-// ============================================================================
-export default function MiransasFinalXCore() {
-  return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black  selection:bg-[#9eff00] selection:text-black">
 
-      <style jsx global>{`
-        @keyframes vcore-belt-scroll { 0% { background-position: 0 0; } 100% { background-position: 44px 0; } }
-        @keyframes vcore-item-flow { 0% { left: 100%; } 100% { left: 0%; } }
-        @keyframes vcore-raw-fade { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }
-        @keyframes vcore-out-fade { 0%, 45% { opacity: 0; } 55%, 100% { opacity: 1; } }
-        @keyframes ssm-rotate { 0% { transform: rotateZ(0deg); } 100% { transform: rotateZ(-360deg); } }
+function Conveyor({ x, y, rotation, isInput = true }: { x: number; y: number; rotation: number; isInput?: boolean }) {
+  const items = useMemo(() => Array.from({ length: 4 }).map((_, i) => ({ id: i, delay: i * 2, file: FILES[i % FILES.length] })), []);
+
+  return (
+    <div
+      className="absolute w-[400px] h-24 -translate-x-1/2 -translate-y-1/2"
+      style={{ left: x, top: y, transform: `rotate(${rotation}deg)`, transformStyle: "preserve-3d" }}
+    >
+      <div className="absolute inset-x-0 top-0 bottom-0 bg-[#0d1017] border-x-8 border-slate-900 rounded-2xl overflow-hidden">
+        <div className="absolute inset-0 shadow-[inset_0_0_50px_rgba(0,0,0,1)]" />
+        <div
+          className="absolute inset-0 opacity-30 bg-[length:32px_100%]"
+          style={{ backgroundImage: "repeating-linear-gradient(90deg, transparent 0, transparent 24px, #000 24px, #000 32px)", animation: `belt-flow 1.5s linear infinite ${isInput ? '' : 'reverse'}` }}
+        />
+        <motion.div animate={{ opacity: [0.1, 0.4, 0.1] }} transition={{ duration: 3, repeat: Infinity }} className="absolute inset-0 blur-3xl opacity-30" style={{ background: isInput ? ROSE : LIME }} />
+        <BeltLaserFlow isInput={isInput} color={isInput ? ROSE : LIME} />
+      </div>
+      {items.map((item) => <DataCard key={item.id} delay={item.delay} color={item.file.color} label={item.file.label} Icon={item.file.icon} isOutput={!isInput} />)}
+    </div>
+  );
+}
+
+// ============================================================================
+// 3. MAIN APP COMPONENT
+// ============================================================================
+export default function MiransasHero() {
+  return (
+    <div className="relative min-h-screen bg-[#020203] text-white overflow-hidden flex flex-col items-center justify-center font-sans tracking-tight selection:bg-rose-500 selection:text-white">
+
+      <style>{`
+        @keyframes belt-flow { from { background-position: 0 0; } to { background-position: 32px 0; } }
+        .perspective-view { perspective: 3500px; }
+        .isometric-layer { transform: rotateX(60deg) rotateZ(-45deg); transform-style: preserve-3d; }
+        .text-glow-lime { text-shadow: 0 0 15px ${LIME}aa; }
+        .text-glow-rose { text-shadow: 0 0 15px ${ROSE}aa; }
       `}</style>
 
-      <div className="relative w-full h-[850px] flex items-center justify-center pointer-events-none" style={{ perspective: "2500px" }}>
-        <div className="relative w-[1200px] h-[1200px]" style={{ transform: "rotateX(60deg) rotateZ(45deg)", transformStyle: "preserve-3d" }}>
+      {/* ====================================================== */}
+      {/* THE NEW WEBGL LASER FLOW BACKGROUND ENTEGRASYONU       */}
+      {/* ====================================================== */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <LaserFlow
+          color={ROSE}
+          wispIntensity={8.0}
+          fogIntensity={0.6}
+          flowSpeed={0.5}
+          verticalBeamOffset={-0.2}
+          horizontalBeamOffset={0.0}
+        />
+      </div>
 
-          <div className="absolute inset-0 opacity-40" style={{ backgroundImage: `linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px)`, backgroundSize: "80px 80px", transform: "translateZ(-5px)" }} />
 
-          <div className="absolute top-1/2 left-1/2 w-[240px] h-[240px] -translate-x-1/2 -translate-y-1/2 z-10" style={{ transformStyle: "preserve-3d" }}>
-            <CubeFace transform="translateZ(-120px) rotateY(180deg)" type="bottom" />
-            <CubeFace transform="translateY(-120px) rotateX(90deg)" type="output" />
-            <CubeFace transform="translateX(-120px) rotateY(-90deg)" type="input" />
-            <div className="absolute top-1/2 left-1/2 w-24 h-24 -translate-x-1/2 -translate-y-1/2 bg-rose-500/10 blur-3xl animate-pulse" />
+      {/* Floating Header UI */}
+      {/* ============================================================== */}
+      {/* HERO TEXT & CALL TO ACTION (Sol Üst)                           */}
+      {/* ============================================================== */}
+      <div className="absolute top-28 left-12 z-[100] flex max-w-xl flex-col pointer-events-none">
+
+        {/* STATUS BADGE */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="relative flex h-2.5 w-2.5 items-center justify-center">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_10px_#f43f5e]" />
+          </div>
+          <span className="font-mono text-[10px] tracking-[0.5em] text-rose-500 uppercase font-bold border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 rounded-full backdrop-blur-sm">
+            MIRANSAS_ACTIVE v4.0
+          </span>
+        </div>
+
+        {/* MAIN TITLE */}
+        <h1 className="mt-2 text-5xl md:text-7xl font-black tracking-tighter uppercase italic text-white drop-shadow-2xl">
+          Miransas <br />
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-rose-600 drop-shadow-[0_0_20px_rgba(244,63,94,0.4)]">
+            Core
+          </span>
+        </h1>
+
+        {/* SUBTITLE */}
+        <p className="text-xs font-mono text-white/50 tracking-[0.3em] mt-4 mb-8">
+          HIGH PERFORMANCE RUST ENGINE
+        </p>
+
+        {/* DESCRIPTION BLOCK (Sol Tarafı Çizgili Modern Liste) */}
+        <div className="flex flex-col gap-2 border-l-2 border-rose-500/30 pl-5 py-1 mb-12">
+          <span className="text-sm md:text-base font-mono font-bold text-white tracking-wide uppercase">
+            Isometric Factory Simulation
+          </span>
+          <span className="text-xs font-mono text-white/40 tracking-[0.1em] uppercase">
+            Powered by Real-Time WebGL Laser Flow
+          </span>
+        </div>
+
+        {/* BUTTONS (pointer-events-auto eklendi ki tıklanabilsin!) */}
+        {/* Not: mt-80 yerine mt-8 kullandım ki tasarımla bütünleşsin. Eğer butonları küpün çok daha aşağısına itmek istersen mt-40 falan yapabilirsin. */}
+        <div className="mt-8 flex items-center gap-5 pointer-events-auto">
+
+          {/* PRIMARY BUTTON (Beyaz ve Parlayan) */}
+          <button
+            className="group relative px-8 py-4 rounded-2xl bg-white text-black font-bold text-sm tracking-wide overflow-hidden transition-all duration-300 hover:scale-105"
+            style={{ boxShadow: '0 0 30px #f43f5e55, 0 0 60px #f43f5e22' }}
+          >
+            {/* rose glow sweep */}
+            <span
+              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"
+              style={{ boxShadow: 'inset 0 0 30px #f43f5e33', background: 'linear-gradient(135deg, rgba(244,63,94,0.08), transparent)' }}
+            />
+            <span className="relative z-10">Get Started Free →</span>
+          </button>
+
+          {/* SECONDARY BUTTON (Hayalet / Outline) */}
+
+
+        </div>
+      </div>
+
+      {/* 3D SCENE */}
+      <div className="relative perspective-view w-full h-[60vh] flex items-center justify-center pointer-events-none z-10 mt-12">
+
+        {/* Isometric Workspace */}
+        <div className="relative isometric-layer w-[1000px] h-[1000px] flex items-center justify-center">
+
+          <div className="absolute inset-0 pointer-events-none opacity-20">
+            <div className="absolute top-1/2 left-0 w-1/2 h-[2px] bg-rose-500 blur-sm" />
+            <div className="absolute top-0 left-1/2 w-[2px] h-1/2 bg-rose-500 blur-sm" />
+            <div className="absolute top-1/2 right-0 w-1/2 h-[2px] bg-lime-500 blur-sm" />
+            <div className="absolute bottom-0 left-1/2 w-[2px] h-1/2 bg-lime-500 blur-sm" />
           </div>
 
-          <div className="mt-20">
-            <ConveyorBelt x={425} y={600} w={650} h={100} rotate={0} isInput={true}/>
-            <ConveyorBelt x={600} y={775} w={650} h={100} rotate={90} isInput={true} />
-             <ConveyorBelt x={600} y={425} w={650} h={100} rotate={90} isInput={false} />
-            <ConveyorBelt x={775} y={600} w={650} h={100} rotate={0} isInput={false} />
-          </div>
+          <Conveyor x={230} y={500} rotation={0} isInput={true} />
+          <Conveyor x={500} y={230} rotation={90} isInput={true} />
+          <Conveyor x={770} y={500} rotation={0} isInput={false} />
+          <Conveyor x={500} y={770} rotation={90} isInput={false} />
 
-          <div className="absolute top-1/2 left-1/2 w-[240px] h-[240px] -translate-x-1/2 -translate-y-1/2 z-40" style={{ transformStyle: "preserve-3d" }}>
-            <CubeFace transform="translateY(120px) rotateX(-90deg)" type="input" />
-            <CubeFace transform="translateX(120px) rotateY(90deg)" type="output" />
+          {/* CENTRAL CORE CUBE */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 z-50" style={{ transformStyle: "preserve-3d", transform: "translateZ(50px)" }}>
 
-            <div className="absolute inset-0" style={{ transform: "translateZ(240px)", transformStyle: "preserve-3d" }}>
-              <div className="absolute inset-0 bg-gradient-to-br from-[#12141f] to-[#020203] border border-white/10 rounded-[2.5rem] shadow-[0_30px_60px_#000]" style={{ maskImage: "radial-gradient(circle, transparent 85px, black 86px)", WebkitMaskImage: "radial-gradient(circle, transparent 85px, black 86px)" }} />
+            <div className="absolute inset-0 bg-gradient-to-br from-[#1a1c26] to-[#050608] border-2 border-white/10 rounded-[3.8rem] shadow-[0_60px_120px_rgba(0,0,0,1)]" style={{ transformStyle: "preserve-3d" }}>
+              <div className="absolute inset-0 border-[3px] border-white/5 rounded-[3.8rem] pointer-events-none" />
+              <div className="absolute inset-10 border-2 border-slate-800/40 rounded-[2.8rem] shadow-[inset_0_0_30px_rgba(0,0,0,0.5)]">
+                <div className="absolute inset-4 border border-white/5 rounded-[2.4rem] opacity-20" />
+              </div>
 
-              <div className="absolute top-1/2 left-1/2 w-[170px] h-[170px] -translate-x-1/2 -translate-y-1/2" style={{ transform: "translateZ(-15px)", transformStyle: "preserve-3d" }}>
-                <div className="relative w-full h-full" style={{ animation: "ssm-rotate 12s linear infinite", transformStyle: "preserve-3d" }}>
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 font-mono text-[9px] font-black text-[#f43f5e] whitespace-nowrap tracking-widest" style={{ transform: `rotateZ(${i * 90}deg) translateY(-58px) rotateX(-90deg)`, filter: "drop-shadow(0 0 5px #f43f5e)" }}>
-                      SSM • MIRANSAS • PIPELINE •
+              {/* TOP FACE */}
+              <div className="absolute inset-0 bg-gradient-to-br from-rose-900/60 via-[#1a0509] to-[#0a0003] border-2 border-rose-500/20 rounded-[4rem] flex flex-col items-center justify-center overflow-hidden" style={{ transform: "translateZ(120px)", transformStyle: "preserve-3d" }}>
+
+                {/* Üst Yüzey Işık Yansıması */}
+                <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/50 to-transparent" />
+
+                {/* Dış Soket Çerçevesi */}
+                <div className="w-40 h-40 rounded-full border-[10px] border-[#1a0509] bg-gradient-to-b from-[#0a0003] to-black flex items-center justify-center shadow-[inset_0_0_40px_rgba(0,0,0,1),0_10px_30px_rgba(244,63,94,0.2)] relative">
+
+                  {/* Lazer Enerji Parlaması */}
+                  <motion.div animate={{ opacity: [0.3, 0.8, 0.3] }} transition={{ duration: 2, repeat: Infinity }} className="absolute inset-0 rounded-full bg-rose-500/20 blur-[20px] pointer-events-none" />
+
+                  {/* İç Çekirdek (Logonun Olduğu Yer) - Zengin Gradient */}
+                  <div className="w-28 h-28 rounded-full bg-gradient-to-br from-rose-700/50 via-rose-950 to-[#050002] flex items-center justify-center border border-rose-500/30 shadow-[0_0_30px_rgba(244,63,94,0.3)] relative overflow-hidden">
+
+                    {/* Dönen Kesik Çizgi Animasyonu */}
+                    <motion.div animate={{ rotate: -360 }} transition={{ duration: 10, repeat: Infinity, ease: "linear" }} className="absolute inset-2 border border-dashed border-rose-400/30 rounded-full" />
+
+                    {/* Logon */}
+                    <img src="./logo.png" alt="Core Logo" className="w-full relative z-10" />
+                  </div>
+                </div>
+
+                {/* Alt Yazı */}
+                <div className="mt-4 flex flex-col items-center gap-1 relative z-10">
+                  <span className="font-mono text-[8px] tracking-[0.5em] text-[#9eff00] uppercase font-bold text-glow-lime">X-CORE PIPELINE</span>
+                  <div className="w-24 h-[1px] bg-rose-500/40" />
+                </div>
+              </div>
+
+              {/* TUNNEL PORTS */}
+              {[
+                { rot: 0, color: ROSE },
+                { rot: 90, color: ROSE },
+                { rot: 180, color: LIME },
+                { rot: 270, color: LIME },
+              ].map((port, i) => (
+                <div key={i} className="absolute top-1/2 left-1/2 w-48 h-48 -translate-x-1/2 -translate-y-1/2" style={{ transform: `rotateY(90deg) rotateX(${port.rot}deg) translateZ(135px)`, transformStyle: "preserve-3d" }}>
+                  <div className="absolute inset-0 rounded-full bg-[#2a2d3e] border border-black shadow-[0_15px_35px_rgba(0,0,0,0.8),inset_0_-5px_15px_rgba(255,255,255,0.1)] flex items-center justify-center">
+                    <div className="absolute inset-[6%] rounded-full bg-[#151722] shadow-[inset_0_20px_40px_rgba(0,0,0,1)] flex items-center justify-center relative overflow-hidden">
+                      <div className="absolute inset-[5%] rounded-full border-[4px]" style={{ borderColor: port.color, boxShadow: `0 0 20px ${port.color}aa, inset 0 0 20px ${port.color}aa` }} />
+                      <div className="absolute inset-[15%] rounded-full bg-[#0d0f17] shadow-[inset_0_20px_30px_rgba(0,0,0,1)]" />
+                      <div className="absolute inset-[28%] rounded-full bg-[#05060a] shadow-[inset_0_25px_40px_rgba(0,0,0,1)]" />
+                      <div className="absolute inset-[40%] rounded-full bg-black shadow-[inset_0_30px_50px_rgba(0,0,0,1)] flex items-center justify-center">
+                        <div className="absolute inset-0 rounded-full blur-[15px] opacity-40 animate-pulse" style={{ background: port.color }} />
+                        <motion.div animate={{ scale: [0.8, 1.4, 0.8], opacity: [0.6, 1, 0.6] }} transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }} className="w-4 h-4 rounded-full bg-white blur-[1px] relative z-20" style={{ boxShadow: `0 0 40px 15px ${port.color}, 0 0 100px 30px ${port.color}` }} />
+                      </div>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
-
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-28 rounded-full bg-[#05060a] border-4 border-[#0a0c12] flex items-center justify-center shadow-[inset_0_5px_15px_#000]" style={{ transform: "translateZ(-20px)" }}>
-                <div className="w-20 h-20 rounded-full bg-[#11141f] border border-white/5 flex items-center justify-center shadow-[0_10px_20px_#000]">
-                  <span className="font-sans text-5xl font-black italic text-[#9eff00] drop-shadow-[0_0_15px_#9eff00]">M</span>
-                </div>
-              </div>
+              ))}
             </div>
+
+            {/* VOLUMETRIC CORE PULSE */}
+            <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.1, 0.35, 0.1] }} transition={{ duration: CORE_PULSE_DURATION, repeat: Infinity, ease: "easeInOut" }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-rose-500 blur-[90px] rounded-full pointer-events-none" />
+            <motion.div animate={{ scale: [1.3, 1, 1.3], opacity: [0.05, 0.2, 0.05] }} transition={{ duration: CORE_PULSE_DURATION, repeat: Infinity, ease: "easeInOut", delay: CORE_PULSE_DURATION / 2 }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] bg-lime-500 blur-[130px] rounded-full pointer-events-none" />
           </div>
         </div>
       </div>
 
-     
+      {/* ============================================================== */}
+      {/* BOTTOM CARD: Lazerin Çarptığı ve Animasyonlu Yüzey             */}
+      {/* ============================================================== */}
+      <div className="relative z-20 w-full max-w-5xl px-6 pb-12 mt-40">
+
+        {/* Lazerin çarptığı yerdeki ışık patlaması (Splash Effect) */}
+        <div className="absolute -top-12 left-1/2 h-24 w-64 -translate-x-1/2 rounded-full bg-rose-500/20 blur-[40px] pointer-events-none" />
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="relative grid grid-cols-1 overflow-hidden rounded-[2.5rem] border border-white/5 bg-[#05060a]/80 backdrop-blur-xl md:grid-cols-2 shadow-[0_20px_60px_rgba(0,0,0,0.8)]"
+        >
+          {/* HAREKETLİ TOP BORDER (Lazer Enerjisinin Yayılması) */}
+          <motion.div
+            animate={{
+              opacity: [0.4, 1, 0.4],
+              width: ["20%", "60%", "20%"],
+              boxShadow: [
+                "0 0 10px rgba(244,63,94,0.5)",
+                "0 0 30px rgba(244,63,94,1)",
+                "0 0 10px rgba(244,63,94,0.5)"
+              ]
+            }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute top-0 left-1/2 h-[2px] -translate-x-1/2 bg-gradient-to-r from-transparent via-rose-500 to-transparent"
+          />
+
+          <div className="flex flex-col justify-center p-12 lg:p-16 relative z-10">
+            <h2 className="mb-6 text-4xl font-black tracking-tight lg:text-5xl">
+              Miransas <br />
+              <span className="text-rose-500">Core Architecture</span>
+            </h2>
+            <p className="mb-10 max-w-md text-lg leading-relaxed text-slate-400">
+              Powering the next generation of high-performance tools. From self-hosted tunneling solutions to advanced Rust-based engines, the Miransas ecosystem gives you full control, speed, and absolute efficiency.
+            </p>
+            <div className="w-fit">
+              <NeonButton>Explore Ecosystem</NeonButton>
+            </div>
+          </div>
+
+          <div className="relative min-h-[400px] p-8 lg:p-12">
+            {/* Kırmızımsı Arka Plan Işığı (Lazerin İçerideki Yansıması) */}
+            <div className="absolute inset-0 bg-gradient-to-l from-rose-500/5 to-transparent pointer-events-none" />
+            <CodeMockup />
+          </div>
+        </motion.div>
+      </div>
+
     </div>
   );
 }
