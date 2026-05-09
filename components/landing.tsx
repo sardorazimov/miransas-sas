@@ -7,20 +7,17 @@ import { motion } from "framer-motion";
 import {
   FileCode, FileText, CheckCircle2,
   Terminal, Database,
-  Sparkles,
-  Globe,
-  Cpu,
-  MessageSquare,
   ArrowRight
 } from "lucide-react";
 
-
-
+// ============================================================================
+// 1. NEON BUTTON (Renk Döngüsüne Bağlı)
+// ============================================================================
 const NeonButton = ({ children }: { children: React.ReactNode }) => (
   <motion.button
     whileHover={{ scale: 1.05 }}
     whileTap={{ scale: 0.95 }}
-    className="group relative flex items-center gap-2 rounded-full bg-rose-500 px-6 py-3 text-sm font-bold text-white transition-shadow hover:shadow-[0_0_30px_rgba(244,63,94,0.6)]"
+    className="group relative flex items-center gap-2 rounded-full cycle-bg px-6 py-3 text-sm font-bold text-white transition-shadow"
   >
     {children}
     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -28,7 +25,7 @@ const NeonButton = ({ children }: { children: React.ReactNode }) => (
 );
 
 // ============================================================================
-// 2. KOD EDİTÖRÜ MOCKUP (MIRANSAS CORE)
+// 2. KOD EDİTÖRÜ MOCKUP
 // ============================================================================
 const CodeMockup = () => {
   const lines = [
@@ -38,14 +35,14 @@ const CodeMockup = () => {
     { num: 4, content: "let config = Config::new(\".env\");", color: "text-amber-400" },
     { num: 5, content: "pub async fn start_core() -> Result<()> {", color: "text-purple-400" },
     { num: 6, content: "    let mut reactor = Reactor::init(config);", color: "text-blue-300" },
-    { num: 7, content: "    reactor.ignite().await", color: "text-rose-400" },
+    { num: 7, content: "    reactor.ignite().await", color: "cycle-text" }, // Bu satır parlayacak
     { num: 8, content: "}", color: "text-purple-400" },
   ];
 
   return (
-    <div className="relative h-full w-full rounded-2xl border border-white/10 bg-black/60 p-6 font-mono text-[13px] leading-relaxed backdrop-blur-xl">
-      {/* Editör Parlaması */}
-      <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full bg-rose-500/10 blur-[80px]" />
+    <div className="relative h-full w-full rounded-2xl border border-white/10 bg-black/60 p-6 font-mono text-[13px] leading-relaxed backdrop-blur-xl shadow-2xl">
+      {/* Editör İç Parlaması (Renk Döngülü) */}
+      <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full cycle-bg blur-[80px] opacity-20 pointer-events-none" />
 
       {lines.map((line) => (
         <div key={line.num} className="flex gap-4">
@@ -58,12 +55,11 @@ const CodeMockup = () => {
       <motion.div
         animate={{ opacity: [1, 0] }}
         transition={{ duration: 0.8, repeat: Infinity }}
-        className="ml-[54px] mt-1 h-4 w-1.5 bg-rose-500"
+        className="ml-[54px] mt-1 h-4 w-1.5 cycle-bg"
       />
     </div>
   );
 };
-
 
 // ============================================================================
 // CONFIGURATION & THEME
@@ -80,7 +76,7 @@ const FILES = [
 ];
 
 // ============================================================================
-// 1. LASER FLOW BACKGROUND COMPONENT (WebGL / Three.js)
+// 3. LASER FLOW BACKGROUND (WebGL / Shader Güncellendi: Renk Döngüsü)
 // ============================================================================
 type LaserFlowProps = {
   className?: string;
@@ -102,7 +98,6 @@ type LaserFlowProps = {
   decay?: number;
   falloffStart?: number;
   fogFallSpeed?: number;
-  color?: string;
 };
 
 const VERT = `
@@ -140,7 +135,6 @@ uniform float uFlowStrength;
 uniform float uDecay;
 uniform float uFalloffStart;
 uniform float uFogFallSpeed;
-uniform vec3 uColor;
 uniform float uFade;
 
 #define PI 3.14159265359
@@ -198,33 +192,33 @@ uniform float uFade;
 #define EDGE_LUMA_T1 2.0
 #define DITHER_STRENGTH 1.0
 
-    float g(float x){return x<=0.00031308?12.92*x:1.055*pow(x,1.0/2.4)-0.055;}
-    float bs(vec2 p,vec2 q,float powr){
-        float d=distance(p,q),f=powr*uFalloffStart,r=(f*f)/(d*d+EPS);
-        return powr*min(1.0,r);
-    }
-    float bsa(vec2 p,vec2 q,float powr,vec2 s){
-        vec2 d=p-q; float dd=(d.x*d.x)/(s.x*s.x)+(d.y*d.y)/(s.y*s.y),f=powr*uFalloffStart,r=(f*f)/(dd+EPS);
-        return powr*min(1.0,r);
-    }
-    float tri01(float x){float f=fract(x);return 1.0-abs(f*2.0-1.0);}
-    float tauWf(float t,float tmin,float tmax){float a=smoothstep(tmin,tmin+EDGE_SOFT,t),b=1.0-smoothstep(tmax-EDGE_SOFT,tmax,t);return max(0.0,a*b);} 
-    float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+34.123);return fract(p.x*p.y);}
-    float vnoise(vec2 p){
-        vec2 i=floor(p),f=fract(p);
-        float a=h21(i),b=h21(i+vec2(1,0)),c=h21(i+vec2(0,1)),d=h21(i+vec2(1,1));
-        vec2 u=f*f*(3.0-2.0*f);
-        return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);
-    }
-    float fbm2(vec2 p){
-        float v=0.0,amp=0.6; mat2 m=mat2(0.86,0.5,-0.5,0.86);
-        for(int i=0;i<FOG_OCTAVES;++i){v+=amp*vnoise(p); p=m*p*2.03+17.1; amp*=0.52;}
-        return v;
-    }
-    float rGate(float x,float l){float a=smoothstep(0.0,W_AA,x),b=1.0-smoothstep(l,l+W_AA,x);return max(0.0,a*b);}
-    float flareY(float y){float t=clamp(1.0-(clamp(y,0.0,FLARE_HEIGHT)/max(FLARE_HEIGHT,EPS)),0.0,1.0);return pow(t,FLARE_EXP);}
+float g(float x){return x<=0.00031308?12.92*x:1.055*pow(x,1.0/2.4)-0.055;}
+float bs(vec2 p,vec2 q,float powr){
+    float d=distance(p,q),f=powr*uFalloffStart,r=(f*f)/(d*d+EPS);
+    return powr*min(1.0,r);
+}
+float bsa(vec2 p,vec2 q,float powr,vec2 s){
+    vec2 d=p-q; float dd=(d.x*d.x)/(s.x*s.x)+(d.y*d.y)/(s.y*s.y),f=powr*uFalloffStart,r=(f*f)/(dd+EPS);
+    return powr*min(1.0,r);
+}
+float tri01(float x){float f=fract(x);return 1.0-abs(f*2.0-1.0);}
+float tauWf(float t,float tmin,float tmax){float a=smoothstep(tmin,tmin+EDGE_SOFT,t),b=1.0-smoothstep(tmax-EDGE_SOFT,tmax,t);return max(0.0,a*b);} 
+float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+34.123);return fract(p.x*p.y);}
+float vnoise(vec2 p){
+    vec2 i=floor(p),f=fract(p);
+    float a=h21(i),b=h21(i+vec2(1,0)),c=h21(i+vec2(0,1)),d=h21(i+vec2(1,1));
+    vec2 u=f*f*(3.0-2.0*f);
+    return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);
+}
+float fbm2(vec2 p){
+    float v=0.0,amp=0.6; mat2 m=mat2(0.86,0.5,-0.5,0.86);
+    for(int i=0;i<FOG_OCTAVES;++i){v+=amp*vnoise(p); p=m*p*2.03+17.1; amp*=0.52;}
+    return v;
+}
+float rGate(float x,float l){float a=smoothstep(0.0,W_AA,x),b=1.0-smoothstep(l,l+W_AA,x);return max(0.0,a*b);}
+float flareY(float y){float t=clamp(1.0-(clamp(y,0.0,FLARE_HEIGHT)/max(FLARE_HEIGHT,EPS)),0.0,1.0);return pow(t,FLARE_EXP);}
 
-    float vWisps(vec2 uv,float topF){
+float vWisps(vec2 uv,float topF){
     float y=uv.y,yf=(y+uFlowTime*uWSpeed)/W_CELL;
     float dRaw=clamp(uWispDensity,0.0,2.0),d=dRaw<=0.0?1.0:dRaw;
     float lanesF=floor(float(W_LANES)*min(d,1.0)+0.5); 
@@ -316,7 +310,24 @@ void mainImage(out vec4 fc,in vec2 frag){
     float LF=L+fog;
     float dith=(h21(frag)-0.5)*(DITHER_STRENGTH/255.0);
     float tone=g(LF+w);
-    vec3 col=tone*uColor+dith;
+    
+    // ======================================================
+    // RENK DÖNGÜSÜ (ROSE -> LIME -> CYAN -> ROSE)
+    // CSS Keyframe'deki 6 saniyelik döngüye donanımsal olarak senkron!
+    // ======================================================
+    float cycleT = iTime * 0.5; // Hız ayarı
+    float phase = mod(cycleT, 3.0);
+    vec3 c1 = vec3(0.957, 0.247, 0.369); // Rose #f43f5e
+    vec3 c2 = vec3(0.620, 1.000, 0.000); // Lime #9eff00
+    vec3 c3 = vec3(0.024, 0.714, 0.831); // Cyan #06b6d4
+    vec3 uC;
+    
+    if(phase < 1.0) uC = mix(c1, c2, smoothstep(0.0, 1.0, phase));
+    else if(phase < 2.0) uC = mix(c2, c3, smoothstep(0.0, 1.0, phase - 1.0));
+    else uC = mix(c3, c1, smoothstep(0.0, 1.0, phase - 2.0));
+
+    vec3 col=tone*uC+dith;
+    
     float alpha=clamp(g(L+w*0.6)+dith*0.6,0.0,1.0);
     float nxE=abs((frag.x-C.x)*invW),xF=pow(clamp(1.0-smoothstep(EDGE_X0,EDGE_X1,nxE),0.0,1.0),EDGE_X_GAMMA);
     float scene=LF+max(0.0,w)*0.5,hi=smoothstep(EDGE_LUMA_T0,EDGE_LUMA_T1,scene);
@@ -332,15 +343,6 @@ void main(){
   gl_FragColor = fc;
 }
 `;
-
-function hexToRGB(hex: string) {
-  let c = hex.trim();
-  if (c[0] === '#') c = c.slice(1);
-  if (c.length === 3)
-    c = c.split('').map(x => x + x).join('');
-  const n = parseInt(c, 16) || 0xffffff;
-  return { r: ((n >> 16) & 255) / 255, g: ((n >> 8) & 255) / 255, b: (n & 255) / 255 };
-}
 
 const LaserFlow: React.FC<LaserFlowProps> = ({
   className,
@@ -361,8 +363,7 @@ const LaserFlow: React.FC<LaserFlowProps> = ({
   flowStrength = 0.25,
   decay = 1.1,
   falloffStart = 1.2,
-  fogFallSpeed = 0.6,
-  color = '#FF79C6'
+  fogFallSpeed = 0.6
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -430,7 +431,6 @@ const LaserFlow: React.FC<LaserFlowProps> = ({
       uDecay: { value: decay },
       uFalloffStart: { value: falloffStart },
       uFogFallSpeed: { value: fogFallSpeed },
-      uColor: { value: new THREE.Vector3(1, 1, 1) },
       uFade: { value: hasFadedRef.current ? 1 : 0 }
     };
     uniformsRef.current = uniforms;
@@ -593,17 +593,14 @@ const LaserFlow: React.FC<LaserFlowProps> = ({
     uniforms.uDecay.value = decay;
     uniforms.uFalloffStart.value = falloffStart;
     uniforms.uFogFallSpeed.value = fogFallSpeed;
-
-    const { r, g, b } = hexToRGB(color || '#FFFFFF');
-    uniforms.uColor.value.set(r, g, b);
-  }, [wispDensity, mouseTiltStrength, horizontalBeamOffset, verticalBeamOffset, flowSpeed, verticalSizing, horizontalSizing, fogIntensity, fogScale, wispSpeed, wispIntensity, flowStrength, decay, falloffStart, fogFallSpeed, color]);
+  }, [wispDensity, mouseTiltStrength, horizontalBeamOffset, verticalBeamOffset, flowSpeed, verticalSizing, horizontalSizing, fogIntensity, fogScale, wispSpeed, wispIntensity, flowStrength, decay, falloffStart, fogFallSpeed]);
 
   return <div ref={mountRef} className={`w-full h-full relative ${className || ''}`} style={style} />;
 };
 
 
 // ============================================================================
-// 2. ISOMETRIC COMPONENTS (Conveyors & Laser Flow inside belts)
+// 4. ISOMETRIC COMPONENTS
 // ============================================================================
 function BeltLaserFlow({ isInput, color }: { isInput: boolean; color: string }) {
   return (
@@ -611,14 +608,8 @@ function BeltLaserFlow({ isInput, color }: { isInput: boolean; color: string }) 
       <motion.div
         animate={{ x: isInput ? ["-100%", "300%"] : ["300%", "-100%"], opacity: [0, 1, 1, 0] }}
         transition={{ duration: 1.2, repeat: Infinity, ease: "linear", repeatDelay: 0.3 }}
-        className="absolute top-1/2 w-48 h-[3px] -translate-y-1/2"
-        style={{ background: `linear-gradient(90deg, transparent, ${color}, #ffffff, ${color}, transparent)`, boxShadow: `0 0 25px ${color}, 0 0 50px ${color}` }}
-      />
-      <motion.div
-        animate={{ x: isInput ? ["-50%", "350%"] : ["350%", "-50%"], opacity: [0, 1, 1, 0] }}
-        transition={{ duration: 0.8, repeat: Infinity, ease: "linear", delay: 0.7 }}
-        className="absolute top-[45%] w-24 h-[1px] -translate-y-1/2 blur-[1px]"
-        style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)`, boxShadow: `0 0 15px ${color}` }}
+        className="absolute top-1/2 w-48 h-[3px] -translate-y-1/2 cycle-bg"
+        style={{ boxShadow: `0 0 25px currentColor, 0 0 50px currentColor` }}
       />
     </div>
   );
@@ -640,19 +631,19 @@ function DataCard({ delay, color, label, Icon, isOutput = false }: { delay: numb
       >
         {isOutput ? (
           <div className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 rounded-full bg-[#9eff00]/20 border border-[#9eff00]/40 flex items-center justify-center relative overflow-hidden">
-              <div className="absolute inset-0 bg-[#9eff00]/20 animate-ping opacity-50" />
-              <CheckCircle2 className="w-6 h-6 text-[#9eff00] relative z-10" strokeWidth={3} />
+            <div className="w-10 h-10 rounded-full border border-white/20 cycle-border flex items-center justify-center relative overflow-hidden">
+              <div className="absolute inset-0 cycle-bg animate-ping opacity-30" />
+              <CheckCircle2 className="w-6 h-6 cycle-text relative z-10" strokeWidth={3} />
             </div>
-            <span className="text-[7px] font-mono font-black text-[#9eff00] tracking-widest uppercase text-glow-lime">DONE</span>
+            <span className="text-[7px] font-mono font-black tracking-widest uppercase cycle-text text-glow-lime">DONE</span>
           </div>
         ) : (
           <>
             <div className="w-10 h-10 rounded-full bg-black/40 border border-white/10 flex items-center justify-center relative overflow-hidden">
               <div className="absolute w-[200%] h-[2px] bg-white/20 -rotate-45 animate-[spin_3s_linear_infinite]" />
-              <Icon className={`w-6 h-6 ${color} relative z-10`} strokeWidth={2} />
+              <Icon className={`w-6 h-6 cycle-text relative z-10`} strokeWidth={2} />
             </div>
-            <span className={`text-[8px] font-mono font-black ${color} tracking-tighter uppercase`}>{label}</span>
+            <span className={`text-[8px] font-mono font-black cycle-text tracking-tighter uppercase`}>{label}</span>
           </>
         )}
       </div>
@@ -674,8 +665,9 @@ function Conveyor({ x, y, rotation, isInput = true }: { x: number; y: number; ro
           className="absolute inset-0 opacity-30 bg-[length:32px_100%]"
           style={{ backgroundImage: "repeating-linear-gradient(90deg, transparent 0, transparent 24px, #000 24px, #000 32px)", animation: `belt-flow 1.5s linear infinite ${isInput ? '' : 'reverse'}` }}
         />
-        <motion.div animate={{ opacity: [0.1, 0.4, 0.1] }} transition={{ duration: 3, repeat: Infinity }} className="absolute inset-0 blur-3xl opacity-30" style={{ background: isInput ? ROSE : LIME }} />
-        <BeltLaserFlow isInput={isInput} color={isInput ? ROSE : LIME} />
+        {/* Bantların Zemin Parlaması da Renk Değiştirir */}
+        <motion.div animate={{ opacity: [0.1, 0.3, 0.1] }} transition={{ duration: 3, repeat: Infinity }} className="absolute inset-0 blur-3xl opacity-20 cycle-bg" />
+        <BeltLaserFlow isInput={isInput} color={ROSE} />
       </div>
       {items.map((item) => <DataCard key={item.id} delay={item.delay} color={item.file.color} label={item.file.label} Icon={item.file.icon} isOutput={!isInput} />)}
     </div>
@@ -683,18 +675,39 @@ function Conveyor({ x, y, rotation, isInput = true }: { x: number; y: number; ro
 }
 
 // ============================================================================
-// 3. MAIN APP COMPONENT
+// 5. MAIN APP COMPONENT
 // ============================================================================
 export default function MiransasHero() {
   return (
     <div className="relative min-h-screen bg-[#020203] text-white overflow-hidden flex flex-col items-center justify-center font-sans tracking-tight selection:bg-rose-500 selection:text-white">
 
+      {/* ====================================================================== */}
+      {/* SİHİRLİ CSS KEYFRAMES: WebGL GLSL ile 6 saniyede senkronize döngü      */}
+      {/* ====================================================================== */}
       <style>{`
         @keyframes belt-flow { from { background-position: 0 0; } to { background-position: 32px 0; } }
         .perspective-view { perspective: 3500px; }
         .isometric-layer { transform: rotateX(60deg) rotateZ(-45deg); transform-style: preserve-3d; }
-        .text-glow-lime { text-shadow: 0 0 15px ${LIME}aa; }
-        .text-glow-rose { text-shadow: 0 0 15px ${ROSE}aa; }
+        
+        @keyframes cycle-bg {
+          0%, 100% { background-color: #f43f5e; box-shadow: 0 0 30px rgba(244,63,94,0.4); }
+          33% { background-color: #9eff00; box-shadow: 0 0 30px rgba(158,255,0,0.4); }
+          66% { background-color: #06b6d4; box-shadow: 0 0 30px rgba(6,182,212,0.4); }
+        }
+        @keyframes cycle-text {
+          0%, 100% { color: #f43f5e; text-shadow: 0 0 20px rgba(244,63,94,0.4); }
+          33% { color: #9eff00; text-shadow: 0 0 20px rgba(158,255,0,0.4); }
+          66% { color: #06b6d4; text-shadow: 0 0 20px rgba(6,182,212,0.4); }
+        }
+        @keyframes cycle-border {
+          0%, 100% { border-color: #f43f5e; }
+          33% { border-color: #9eff00; }
+          66% { border-color: #06b6d4; }
+        }
+        
+        .cycle-bg { animation: cycle-bg 6s infinite ease-in-out; }
+        .cycle-text { animation: cycle-text 6s infinite ease-in-out; }
+        .cycle-border { animation: cycle-border 6s infinite ease-in-out; }
       `}</style>
 
       {/* ====================================================== */}
@@ -702,7 +715,6 @@ export default function MiransasHero() {
       {/* ====================================================== */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <LaserFlow
-          color={ROSE}
           wispIntensity={8.0}
           fogIntensity={0.6}
           flowSpeed={0.5}
@@ -711,39 +723,32 @@ export default function MiransasHero() {
         />
       </div>
 
-
-      {/* Floating Header UI */}
       {/* ============================================================== */}
       {/* HERO TEXT & CALL TO ACTION (Sol Üst)                           */}
       {/* ============================================================== */}
       <div className="absolute top-28 left-12 z-[100] flex max-w-xl flex-col pointer-events-none">
-
-        {/* STATUS BADGE */}
         <div className="flex items-center gap-3 mb-4">
           <div className="relative flex h-2.5 w-2.5 items-center justify-center">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_10px_#f43f5e]" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full cycle-bg opacity-60" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full cycle-bg" />
           </div>
-          <span className="font-mono text-[10px] tracking-[0.5em] text-rose-500 uppercase font-bold border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 rounded-full backdrop-blur-sm">
+          <span className="font-mono text-[10px] tracking-[0.5em] uppercase font-bold border bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm cycle-text cycle-border">
             MIRANSAS_ACTIVE v4.0
           </span>
         </div>
 
-        {/* MAIN TITLE */}
         <h1 className="mt-2 text-5xl md:text-7xl font-black tracking-tighter uppercase italic text-white drop-shadow-2xl">
           Miransas <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-rose-600 drop-shadow-[0_0_20px_rgba(244,63,94,0.4)]">
+          <span className="cycle-text font-black">
             Core
           </span>
         </h1>
 
-        {/* SUBTITLE */}
         <p className="text-xs font-mono text-white/50 tracking-[0.3em] mt-4 mb-8">
           HIGH PERFORMANCE RUST ENGINE
         </p>
 
-        {/* DESCRIPTION BLOCK (Sol Tarafı Çizgili Modern Liste) */}
-        <div className="flex flex-col gap-2 border-l-2 border-rose-500/30 pl-5 py-1 mb-12">
+        <div className="flex flex-col gap-2 border-l-2 cycle-border pl-5 py-1 mb-12">
           <span className="text-sm md:text-base font-mono font-bold text-white tracking-wide uppercase">
             Isometric Factory Simulation
           </span>
@@ -752,41 +757,14 @@ export default function MiransasHero() {
           </span>
         </div>
 
-        {/* BUTTONS (pointer-events-auto eklendi ki tıklanabilsin!) */}
-        {/* Not: mt-80 yerine mt-8 kullandım ki tasarımla bütünleşsin. Eğer butonları küpün çok daha aşağısına itmek istersen mt-40 falan yapabilirsin. */}
         <div className="mt-8 flex items-center gap-5 pointer-events-auto">
-
-          {/* PRIMARY BUTTON (Beyaz ve Parlayan) */}
-          <button
-            className="group relative px-8 py-4 rounded-2xl bg-white text-black font-bold text-sm tracking-wide overflow-hidden transition-all duration-300 hover:scale-105"
-            style={{ boxShadow: '0 0 30px #f43f5e55, 0 0 60px #f43f5e22' }}
-          >
-            {/* rose glow sweep */}
-            <span
-              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"
-              style={{ boxShadow: 'inset 0 0 30px #f43f5e33', background: 'linear-gradient(135deg, rgba(244,63,94,0.08), transparent)' }}
-            />
-            <span className="relative z-10">Get Started Free →</span>
-          </button>
-
-          {/* SECONDARY BUTTON (Hayalet / Outline) */}
-
-
+          <NeonButton>Get Started Free</NeonButton>
         </div>
       </div>
 
       {/* 3D SCENE */}
       <div className="relative perspective-view w-full h-[60vh] flex items-center justify-center pointer-events-none z-10 mt-12">
-
-        {/* Isometric Workspace */}
         <div className="relative isometric-layer w-[1000px] h-[1000px] flex items-center justify-center">
-
-          <div className="absolute inset-0 pointer-events-none opacity-20">
-            <div className="absolute top-1/2 left-0 w-1/2 h-[2px] bg-rose-500 blur-sm" />
-            <div className="absolute top-0 left-1/2 w-[2px] h-1/2 bg-rose-500 blur-sm" />
-            <div className="absolute top-1/2 right-0 w-1/2 h-[2px] bg-lime-500 blur-sm" />
-            <div className="absolute bottom-0 left-1/2 w-[2px] h-1/2 bg-lime-500 blur-sm" />
-          </div>
 
           <Conveyor x={230} y={500} rotation={0} isInput={true} />
           <Conveyor x={500} y={230} rotation={90} isInput={true} />
@@ -803,51 +781,39 @@ export default function MiransasHero() {
               </div>
 
               {/* TOP FACE */}
-              <div className="absolute inset-0 bg-gradient-to-br from-rose-900/60 via-[#1a0509] to-[#0a0003] border-2 border-rose-500/20 rounded-[4rem] flex flex-col items-center justify-center overflow-hidden" style={{ transform: "translateZ(120px)", transformStyle: "preserve-3d" }}>
+              <div className="absolute inset-0 bg-gradient-to-br from-black/80 via-[#1a0509] to-[#0a0003] border-2 cycle-border rounded-[4rem] flex flex-col items-center justify-center overflow-hidden" style={{ transform: "translateZ(120px)", transformStyle: "preserve-3d" }}>
+                <div className="absolute top-0 left-0 w-full h-[2px] cycle-bg opacity-50" />
+                
+                <div className="w-40 h-40 rounded-full border-[10px] border-[#1a0509] bg-gradient-to-b from-[#0a0003] to-black flex items-center justify-center shadow-[inset_0_0_40px_rgba(0,0,0,1)] relative">
+                  {/* Renk Döngülü Lazer Enerji Parlaması */}
+                  <motion.div animate={{ opacity: [0.3, 0.8, 0.3] }} transition={{ duration: 2, repeat: Infinity }} className="absolute inset-0 rounded-full cycle-bg blur-[20px] pointer-events-none opacity-20" />
 
-                {/* Üst Yüzey Işık Yansıması */}
-                <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/50 to-transparent" />
-
-                {/* Dış Soket Çerçevesi */}
-                <div className="w-40 h-40 rounded-full border-[10px] border-[#1a0509] bg-gradient-to-b from-[#0a0003] to-black flex items-center justify-center shadow-[inset_0_0_40px_rgba(0,0,0,1),0_10px_30px_rgba(244,63,94,0.2)] relative">
-
-                  {/* Lazer Enerji Parlaması */}
-                  <motion.div animate={{ opacity: [0.3, 0.8, 0.3] }} transition={{ duration: 2, repeat: Infinity }} className="absolute inset-0 rounded-full bg-rose-500/20 blur-[20px] pointer-events-none" />
-
-                  {/* İç Çekirdek (Logonun Olduğu Yer) - Zengin Gradient */}
-                  <div className="w-28 h-28 rounded-full bg-gradient-to-br from-rose-700/50 via-rose-950 to-[#050002] flex items-center justify-center border border-rose-500/30 shadow-[0_0_30px_rgba(244,63,94,0.3)] relative overflow-hidden">
-
-                    {/* Dönen Kesik Çizgi Animasyonu */}
-                    <motion.div animate={{ rotate: -360 }} transition={{ duration: 10, repeat: Infinity, ease: "linear" }} className="absolute inset-2 border border-dashed border-rose-400/30 rounded-full" />
-
-                    {/* Logon */}
-                    <img src="./logo.png" alt="Core Logo" className="w-full relative z-10" />
+                  <div className="w-28 h-28 rounded-full bg-gradient-to-br from-black/50 via-gray-900 to-[#050002] flex items-center justify-center border cycle-border relative overflow-hidden">
+                    <motion.div animate={{ rotate: -360 }} transition={{ duration: 10, repeat: Infinity, ease: "linear" }} className="absolute inset-2 border border-dashed cycle-border rounded-full opacity-40" />
+                    {/* Buraya logonu tekrar koyabilirsin */}
+                    <span className="text-4xl font-black italic cycle-text drop-shadow-[0_0_20px_currentColor] relative z-10">M</span>
                   </div>
                 </div>
 
-                {/* Alt Yazı */}
                 <div className="mt-4 flex flex-col items-center gap-1 relative z-10">
-                  <span className="font-mono text-[8px] tracking-[0.5em] text-[#9eff00] uppercase font-bold text-glow-lime">X-CORE PIPELINE</span>
-                  <div className="w-24 h-[1px] bg-rose-500/40" />
+                  <span className="font-mono text-[8px] tracking-[0.5em] uppercase font-bold cycle-text">X-CORE PIPELINE</span>
+                  <div className="w-24 h-[1px] cycle-bg opacity-40" />
                 </div>
               </div>
 
               {/* TUNNEL PORTS */}
               {[
-                { rot: 0, color: ROSE },
-                { rot: 90, color: ROSE },
-                { rot: 180, color: LIME },
-                { rot: 270, color: LIME },
+                { rot: 0 }, { rot: 90 }, { rot: 180 }, { rot: 270 },
               ].map((port, i) => (
                 <div key={i} className="absolute top-1/2 left-1/2 w-48 h-48 -translate-x-1/2 -translate-y-1/2" style={{ transform: `rotateY(90deg) rotateX(${port.rot}deg) translateZ(135px)`, transformStyle: "preserve-3d" }}>
                   <div className="absolute inset-0 rounded-full bg-[#2a2d3e] border border-black shadow-[0_15px_35px_rgba(0,0,0,0.8),inset_0_-5px_15px_rgba(255,255,255,0.1)] flex items-center justify-center">
                     <div className="absolute inset-[6%] rounded-full bg-[#151722] shadow-[inset_0_20px_40px_rgba(0,0,0,1)] flex items-center justify-center relative overflow-hidden">
-                      <div className="absolute inset-[5%] rounded-full border-[4px]" style={{ borderColor: port.color, boxShadow: `0 0 20px ${port.color}aa, inset 0 0 20px ${port.color}aa` }} />
+                      <div className="absolute inset-[5%] rounded-full border-[4px] cycle-border opacity-50" />
                       <div className="absolute inset-[15%] rounded-full bg-[#0d0f17] shadow-[inset_0_20px_30px_rgba(0,0,0,1)]" />
                       <div className="absolute inset-[28%] rounded-full bg-[#05060a] shadow-[inset_0_25px_40px_rgba(0,0,0,1)]" />
                       <div className="absolute inset-[40%] rounded-full bg-black shadow-[inset_0_30px_50px_rgba(0,0,0,1)] flex items-center justify-center">
-                        <div className="absolute inset-0 rounded-full blur-[15px] opacity-40 animate-pulse" style={{ background: port.color }} />
-                        <motion.div animate={{ scale: [0.8, 1.4, 0.8], opacity: [0.6, 1, 0.6] }} transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }} className="w-4 h-4 rounded-full bg-white blur-[1px] relative z-20" style={{ boxShadow: `0 0 40px 15px ${port.color}, 0 0 100px 30px ${port.color}` }} />
+                        <div className="absolute inset-0 rounded-full blur-[15px] opacity-40 animate-pulse cycle-bg" />
+                        <motion.div animate={{ scale: [0.8, 1.4, 0.8], opacity: [0.6, 1, 0.6] }} transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }} className="w-4 h-4 rounded-full bg-white blur-[1px] relative z-20 cycle-bg opacity-80" />
                       </div>
                     </div>
                   </div>
@@ -855,46 +821,41 @@ export default function MiransasHero() {
               ))}
             </div>
 
-            {/* VOLUMETRIC CORE PULSE */}
-            <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.1, 0.35, 0.1] }} transition={{ duration: CORE_PULSE_DURATION, repeat: Infinity, ease: "easeInOut" }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-rose-500 blur-[90px] rounded-full pointer-events-none" />
-            <motion.div animate={{ scale: [1.3, 1, 1.3], opacity: [0.05, 0.2, 0.05] }} transition={{ duration: CORE_PULSE_DURATION, repeat: Infinity, ease: "easeInOut", delay: CORE_PULSE_DURATION / 2 }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] bg-lime-500 blur-[130px] rounded-full pointer-events-none" />
+            {/* DEVASA VOLUMETRIK REAKTÖR IŞIĞI (SÜREKLİ RENK DEĞİŞTİRİR) */}
+            <motion.div 
+              animate={{ scale: [1, 1.3, 1], opacity: [0.1, 0.25, 0.1] }} 
+              transition={{ duration: CORE_PULSE_DURATION, repeat: Infinity, ease: "easeInOut" }} 
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] blur-[100px] rounded-full pointer-events-none cycle-bg" 
+            />
           </div>
         </div>
       </div>
 
       {/* ============================================================== */}
-      {/* BOTTOM CARD: Lazerin Çarptığı ve Animasyonlu Yüzey             */}
+      {/* BOTTOM CARD: LAZERİN ÇARPTIĞI YER (mt-10 ile yukarı çekildi)   */}
       {/* ============================================================== */}
-      <div className="relative z-20 w-full max-w-5xl px-6 pb-12 mt-40">
+      <div className="relative z-20 w-full max-w-5xl px-6 pb-12  pt-[44rem]">
 
-        {/* Lazerin çarptığı yerdeki ışık patlaması (Splash Effect) */}
-        <div className="absolute -top-12 left-1/2 h-24 w-64 -translate-x-1/2 rounded-full bg-rose-500/20 blur-[40px] pointer-events-none" />
+        {/* Lazerin tam karta vurduğu yerdeki Devasa Işık Patlaması */}
+        <div className="absolute top-0 left-1/2 h-32 w-72 -translate-x-1/2 rounded-full blur-[50px] pointer-events-none cycle-bg opacity-30" />
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="relative grid grid-cols-1 overflow-hidden rounded-[2.5rem] border border-white/5 bg-[#05060a]/80 backdrop-blur-xl md:grid-cols-2 shadow-[0_20px_60px_rgba(0,0,0,0.8)]"
+          className="relative grid grid-cols-1 overflow-hidden rounded-[2.5rem] border-x border-b border-white/5 bg-[#05060a]/80 backdrop-blur-xl md:grid-cols-2 shadow-[0_20px_60px_rgba(0,0,0,0.8)] pt-2 cycle-border border-t-2"
         >
-          {/* HAREKETLİ TOP BORDER (Lazer Enerjisinin Yayılması) */}
+          {/* HAREKETLİ ÜST SINIR ÇİZGİSİ (Lazer enerjisinin kenarlara yayılması) */}
           <motion.div
-            animate={{
-              opacity: [0.4, 1, 0.4],
-              width: ["20%", "60%", "20%"],
-              boxShadow: [
-                "0 0 10px rgba(244,63,94,0.5)",
-                "0 0 30px rgba(244,63,94,1)",
-                "0 0 10px rgba(244,63,94,0.5)"
-              ]
-            }}
+            animate={{ width: ["20%", "80%", "20%"] }}
             transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-0 left-1/2 h-[2px] -translate-x-1/2 bg-gradient-to-r from-transparent via-rose-500 to-transparent"
+            className="absolute top-0 left-1/2 h-[3px] -translate-x-1/2 cycle-bg"
           />
 
           <div className="flex flex-col justify-center p-12 lg:p-16 relative z-10">
             <h2 className="mb-6 text-4xl font-black tracking-tight lg:text-5xl">
               Miransas <br />
-              <span className="text-rose-500">Core Architecture</span>
+              <span className="cycle-text">Core Architecture</span>
             </h2>
             <p className="mb-10 max-w-md text-lg leading-relaxed text-slate-400">
               Powering the next generation of high-performance tools. From self-hosted tunneling solutions to advanced Rust-based engines, the Miransas ecosystem gives you full control, speed, and absolute efficiency.
@@ -905,8 +866,7 @@ export default function MiransasHero() {
           </div>
 
           <div className="relative min-h-[400px] p-8 lg:p-12">
-            {/* Kırmızımsı Arka Plan Işığı (Lazerin İçerideki Yansıması) */}
-            <div className="absolute inset-0 bg-gradient-to-l from-rose-500/5 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 cycle-bg opacity-5 blur-[100px] pointer-events-none" />
             <CodeMockup />
           </div>
         </motion.div>
